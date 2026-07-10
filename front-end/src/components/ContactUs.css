@@ -1,0 +1,181 @@
+/* Layout and Background */
+.contact-minimal-page {
+  background-color: #ffffff;
+  min-height: 100vh;
+  padding: 80px 20px;
+  color: #000000;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+.contact-intro {
+  text-align: center;
+  margin-bottom: 70px;
+}
+
+.contact-intro h1 {
+  font-size: 2.8rem;
+  font-weight: 800;
+  margin-bottom: 10px;
+}
+
+.gold-separator {
+  width: 60px;
+  height: 4px;
+  background-color: #C89B2B;
+  margin: 20px auto;
+}
+
+/* Grid System */
+.contact-main-grid {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  max-width: 1150px;
+  margin: 0 auto;
+  gap: 80px;
+}
+
+/* Typography and Blocks */
+.info-block {
+  margin-bottom: 40px;
+}
+
+.gold-heading {
+  color: #C89B2B;
+  font-size: 1.8rem;
+  margin-bottom: 15px;
+}
+
+.gold-subheading {
+  color: #C89B2B;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  margin-bottom: 10px;
+  font-weight: 700;
+}
+
+.black-text {
+  color: #000000;
+  font-size: 1.1rem;
+  line-height: 1.6;
+}
+
+.gold-postal-box {
+  display: inline-block;
+  border: 2px solid #C89B2B;
+  color: #C89B2B;
+  padding: 8px 18px;
+  border-radius: 4px;
+  font-weight: 800;
+  margin-top: 20px;
+}
+
+/* Form Styling */
+.form-card-white {
+  background: #ffffff;
+  padding: 50px;
+  border-radius: 12px;
+  box-shadow: 0 15px 45px rgba(0,0,0,0.06);
+  border: 1px solid #f0f0f0;
+}
+
+.mb-20 { margin-bottom: 25px; }
+
+.form-group {
+  margin-bottom: 25px;
+}
+
+.form-group label {
+  display: block;
+  font-weight: 700;
+  font-size: 0.8rem;
+  margin-bottom: 8px;
+  text-transform: uppercase;
+}
+
+.form-group input, 
+.form-group textarea {
+  width: 100%;
+  padding: 14px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-size: 1rem;
+  outline: none;
+  transition: all 0.3s ease;
+}
+
+.form-group input:focus, 
+.form-group textarea:focus {
+  border-color: #C89B2B;
+  box-shadow: 0 0 0 3px rgba(200, 155, 43, 0.1);
+}
+
+.gold-action-btn {
+  width: 100%;
+  background-color: #C89B2B;
+  color: #ffffff;
+  padding: 16px;
+  border: none;
+  border-radius: 6px;
+  font-size: 1.1rem;
+  font-weight: bold;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.gold-action-btn:hover {
+  background-color: #a67f22;
+}
+
+/* Social Media Footer */
+.contact-social-footer {
+  margin-top: 100px;
+  text-align: center;
+  padding-bottom: 40px;
+}
+
+.social-divider {
+  width: 100%;
+  max-width: 1150px;
+  height: 1px;
+  background-color: #eeeeee;
+  margin: 0 auto 40px auto;
+}
+
+.follow-us-text {
+  color: #000;
+  text-transform: uppercase;
+  letter-spacing: 4px;
+  font-size: 0.8rem;
+  margin-bottom: 30px;
+}
+
+.social-icons-row {
+  display: flex;
+  justify-content: center;
+  gap: 40px;
+}
+
+.social-link {
+  color: #000;
+  font-size: 1.8rem;
+  transition: all 0.3s ease;
+}
+
+.social-link:hover {
+  color: #C89B2B;
+  transform: translateY(-5px);
+}
+
+/* Responsive Logic */
+@media (max-width: 900px) {
+  .contact-main-grid {
+    grid-template-columns: 1fr;
+    gap: 50px;
+  }
+  
+  .contact-intro h1 {
+    font-size: 2.2rem;
+  }
+}

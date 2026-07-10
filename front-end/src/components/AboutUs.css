@@ -1,0 +1,121 @@
+.about-container-gold {
+  max-width: 1000px;
+  margin: 40px auto;
+  padding: 40px;
+  background-color: #ffffff;
+  color: #333;
+  font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+  box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+  border-radius: 20px;
+}
+
+.about-header {
+  text-align: center;
+  margin-bottom: 50px;
+}
+
+.about-header h1 {
+  color: #0B5D4B;
+  font-size: 2.5rem;
+  margin-bottom: 10px;
+}
+
+.header-line {
+  width: 100px;
+  height: 4px;
+  background: #C89B2B;
+  margin: 0 auto;
+}
+
+.section-title-gold {
+  color: #0B5D4B;
+  border-bottom: 2px solid #f0f0f0;
+  padding-bottom: 10px;
+  margin-bottom: 25px;
+  font-size: 1.5rem;
+}
+
+/* Timeline Styles */
+.timeline {
+  border-left: 3px solid #C89B2B;
+  margin-left: 20px;
+  padding-left: 30px;
+  margin-bottom: 50px;
+}
+
+.timeline-item {
+  position: relative;
+  margin-bottom: 20px;
+}
+
+.timeline-item::before {
+  content: '';
+  position: absolute;
+  left: -38px;
+  top: 5px;
+  width: 12px;
+  height: 12px;
+  background: #C89B2B;
+  border-radius: 50%;
+}
+
+.year {
+  font-weight: bold;
+  color: #C89B2B;
+  margin-right: 15px;
+}
+
+/* Vision/Mission Cards */
+.vision-mission-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  margin-bottom: 50px;
+}
+
+.info-card {
+  padding: 30px;
+  background: #fff;
+  border-radius: 15px;
+  text-align: center;
+  transition: transform 0.3s ease;
+  border: 1px solid #eee;
+}
+
+.info-card:hover {
+  transform: translateY(-5px);
+}
+
+.gold-border {
+  border-top: 5px solid #C89B2B;
+}
+
+.card-icon {
+  font-size: 2rem;
+  margin-bottom: 15px;
+}
+
+/* Objectives Grid */
+.objectives-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.obj-item {
+  background: #fdfdfd;
+  padding: 20px;
+  border-radius: 10px;
+  border-left: 4px solid #0B5D4B;
+}
+
+.obj-item h4 {
+  margin-bottom: 10px;
+  color: #0B5D4B;
+}
+
+.obj-item p {
+  font-size: 0.9rem;
+  line-height: 1.5;
+  color: #555;
+}

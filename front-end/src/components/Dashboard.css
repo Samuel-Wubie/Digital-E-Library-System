@@ -1,0 +1,732 @@
+/* ============================================================================
+   DASHBOARD.CSS — Ethiopia Geological Institute Library Records
+   A warm "gold/elegant" theme (deep charcoal + amber-gold accents) distinct
+   from the cooler slate-blue admin console, since this is the public-facing
+   library page rather than an internal admin tool.
+   ============================================================================ */
+
+.dashboard-container-gold {
+  display: flex;
+  min-height: 100vh;
+  width: 100%;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+  background-color: #faf8f4;
+  color: #1f2937;
+  box-sizing: border-box;
+}
+
+.dashboard-container-gold *,
+.dashboard-container-gold *::before,
+.dashboard-container-gold *::after {
+  box-sizing: inherit;
+}
+
+.dashboard-container-gold button,
+.dashboard-container-gold input,
+.dashboard-container-gold select {
+  font-family: inherit;
+}
+
+/* ============================================================================
+   MAIN COLUMN
+   ============================================================================ */
+.dashboard-main-gold {
+  flex: 1;
+  padding: 2rem 2.25rem;
+  min-width: 0;
+}
+
+.main-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-bottom: 1.75rem;
+}
+
+.section-title {
+  font-size: 1.375rem;
+  font-weight: 700;
+  color: #1c1410;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+.header-action-button-group {
+  display: flex;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+}
+
+.btn-add-elegant {
+  background-color: #1c1410;
+  color: #f3d9a4;
+  border: 1px solid #c8922a;
+  border-radius: 0.6rem;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.825rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.12s ease, box-shadow 0.15s ease, opacity 0.15s ease;
+}
+
+.btn-add-elegant:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(28, 20, 16, 0.2);
+}
+
+.loader-text {
+  padding: 3rem 0;
+  text-align: center;
+  font-size: 0.9rem;
+  color: #9a8a73;
+}
+
+/* ============================================================================
+   BOOK / RECORD CARDS
+   ============================================================================ */
+.results-list {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.book-card-gold {
+  background-color: #ffffff;
+  border: 1px solid #ece4d3;
+  border-radius: 1rem;
+  padding: 1.1rem 1.3rem;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+  box-shadow: 0 1px 2px rgba(28, 20, 16, 0.04), 0 1px 1px rgba(28, 20, 16, 0.03);
+  transition: box-shadow 0.18s ease, transform 0.12s ease;
+}
+
+.book-card-gold:hover {
+  box-shadow: 0 8px 20px rgba(28, 20, 16, 0.08);
+  transform: translateY(-1px);
+}
+
+.book-left-content {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+  flex: 1;
+  min-width: 240px;
+}
+
+.book-icon-box-gold {
+  width: 42px;
+  height: 42px;
+  border-radius: 0.7rem;
+  background: linear-gradient(135deg, #f3d9a4, #e3b768);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.2rem;
+  flex-shrink: 0;
+}
+
+.book-info h3 {
+  font-size: 1rem;
+  font-weight: 700;
+  color: #1c1410;
+  margin: 0 0 0.45rem 0;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.3rem 1.25rem;
+}
+
+.info-grid span {
+  font-size: 0.8rem;
+  color: #6b5d4a;
+}
+
+.info-grid strong {
+  color: #4a3f30;
+  font-weight: 600;
+}
+
+.book-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 0.6rem;
+  flex-shrink: 0;
+}
+
+.action-button-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.btn-view,
+.btn-download {
+  border: none;
+  border-radius: 0.55rem;
+  padding: 0.45rem 0.95rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: opacity 0.15s ease, transform 0.1s ease;
+}
+
+.btn-view {
+  background-color: #f1ece0;
+  color: #4a3f30;
+}
+
+.btn-view:hover {
+  background-color: #e9e1cf;
+}
+
+.btn-download {
+  background-color: #c8922a;
+  color: #ffffff;
+}
+
+.btn-download:hover {
+  background-color: #b07f22;
+}
+
+.admin-btns {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.edit-link,
+.delete-link {
+  background: none;
+  border: none;
+  font-size: 0.75rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0.2rem 0.3rem;
+}
+
+.edit-link {
+  color: #1d6f5c;
+}
+
+.edit-link:hover {
+  text-decoration: underline;
+}
+
+.delete-link {
+  color: #b3422f;
+}
+
+.delete-link:hover {
+  text-decoration: underline;
+}
+
+/* ============================================================================
+   SIDEBAR
+   ============================================================================ */
+.dashboard-sidebar-gold {
+  width: 290px;
+  background-color: #1c1410;
+  color: #f3eee2;
+  padding: 1.75rem 1.5rem;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+}
+
+.profile-section-gold {
+  text-align: center;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid rgba(243, 217, 164, 0.15);
+  margin-bottom: 1.5rem;
+}
+
+.avatar-gold {
+  width: 56px;
+  height: 56px;
+  margin: 0 auto 0.75rem;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #f3d9a4, #c8922a);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+}
+
+.profile-section-gold h3 {
+  font-size: 0.95rem;
+  font-weight: 700;
+  margin: 0 0 0.35rem 0;
+  color: #ffffff;
+}
+
+.role-tag {
+  display: inline-flex;
+  padding: 0.2rem 0.7rem;
+  border-radius: 999px;
+  background-color: rgba(243, 217, 164, 0.15);
+  color: #f3d9a4;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.sidebar-group {
+  flex: 1;
+}
+
+.sidebar-group h4 {
+  font-size: 0.78rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #c8b89a;
+  margin: 0 0 1rem 0;
+}
+
+.filter-input-gold {
+  margin-bottom: 1rem;
+}
+
+.filter-input-gold label {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #b2945b;
+  margin-bottom: 0.3rem;
+}
+
+.filter-input-gold input,
+.select-gold {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.8125rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(243, 217, 164, 0.2);
+  background-color: rgba(255, 255, 255, 0.06);
+  color: #f3eee2;
+  outline: none;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+
+.filter-input-gold input::placeholder {
+  color: #8a7c66;
+}
+
+.filter-input-gold input:focus,
+.select-gold:focus {
+  border-color: #c8922a;
+  background-color: rgba(255, 255, 255, 0.1);
+}
+
+.select-gold option {
+  background-color: #1c1410;
+  color: #f3eee2;
+}
+
+.btn-reset {
+  width: 100%;
+  padding: 0.55rem;
+  border-radius: 0.5rem;
+  border: 1px solid rgba(243, 217, 164, 0.25);
+  background: none;
+  color: #f3d9a4;
+  font-size: 0.78rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 0.4rem;
+  transition: background-color 0.15s ease;
+}
+
+.btn-reset:hover {
+  background-color: rgba(243, 217, 164, 0.08);
+}
+
+.logout-btn-red {
+  width: 100%;
+  padding: 0.65rem;
+  border-radius: 0.55rem;
+  border: none;
+  background-color: #7a2e22;
+  color: #ffffff;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin-top: 1.25rem;
+  transition: background-color 0.15s ease;
+}
+
+.logout-btn-red:hover {
+  background-color: #93392b;
+}
+
+/* ============================================================================
+   MODALS — shared overlay + content shell
+   ============================================================================ */
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(28, 20, 16, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1.5rem;
+}
+
+.modal-content {
+  background-color: #ffffff;
+  border-radius: 1rem;
+  padding: 1.75rem;
+  width: 100%;
+  max-width: 480px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 24px 60px rgba(28, 20, 16, 0.3);
+}
+
+.modal-content h3 {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: #1c1410;
+  margin: 0 0 1.25rem 0;
+}
+
+.modal-form-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.modal-form-body input {
+  width: 100%;
+  padding: 0.6rem 0.8rem;
+  border: 1px solid #e3dcc9;
+  border-radius: 0.55rem;
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.modal-form-body input:focus {
+  border-color: #c8922a;
+  box-shadow: 0 0 0 3px rgba(200, 146, 42, 0.15);
+}
+
+.form-row-dual {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.9rem;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1.5rem;
+}
+
+.modal-footer button {
+  border: none;
+  border-radius: 0.55rem;
+  padding: 0.55rem 1.1rem;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.modal-footer button[type="button"] {
+  background-color: #f1ece0;
+  color: #4a3f30;
+}
+
+.modal-footer button[type="button"]:hover {
+  background-color: #e9e1cf;
+}
+
+.save-btn {
+  background-color: #c8922a !important;
+  color: #ffffff !important;
+}
+
+.save-btn:hover {
+  background-color: #b07f22 !important;
+}
+
+.btn-cancel-flat {
+  background: none !important;
+  color: #8a7c66 !important;
+}
+
+.btn-cancel-flat:hover {
+  color: #4a3f30 !important;
+}
+
+/* ============================================================================
+   DOCUMENT PREVIEW MODAL
+   ============================================================================ */
+.modal-content--viewer {
+  display: flex;
+  flex-direction: column;
+  padding: 0;
+}
+
+.viewer-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.1rem 1.5rem;
+  border-bottom: 1px solid #ece4d3;
+  flex-shrink: 0;
+}
+
+.viewer-header h3 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.close-viewer-btn {
+  background: none;
+  border: 1px solid #e3dcc9;
+  border-radius: 0.5rem;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: #4a3f30;
+  cursor: pointer;
+}
+
+.close-viewer-btn:hover {
+  background-color: #f5f0e6;
+}
+
+.document-scroll-container {
+  flex: 1;
+  overflow-y: auto;
+  padding: 1.5rem;
+  background-color: #f7f4ec;
+}
+
+.document-page-pane {
+  position: relative;
+  background-color: #ffffff;
+  border: 1px solid #ece4d3;
+  border-radius: 0.6rem;
+  padding: 1.5rem;
+  margin-bottom: 1rem;
+  min-height: 200px;
+}
+
+.page-number-tag {
+  position: absolute;
+  top: 0.75rem;
+  right: 1rem;
+  font-size: 0.7rem;
+  color: #b2a285;
+  font-weight: 600;
+}
+
+.document-sample-text h4 {
+  font-size: 0.85rem;
+  color: #4a3f30;
+  margin: 0 0 0.6rem 0;
+}
+
+.document-sample-text p {
+  font-size: 0.8rem;
+  color: #6b5d4a;
+  line-height: 1.6;
+  margin: 0 0 0.75rem 0;
+}
+
+.blur-paywall-screen {
+  position: absolute;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: rgba(255, 255, 255, 0.88);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 0.6rem;
+}
+
+.paywall-notice-box {
+  text-align: center;
+  padding: 1.5rem;
+  max-width: 320px;
+}
+
+.paywall-notice-box h3 {
+  font-size: 1rem;
+  margin: 0.5rem 0;
+  color: #1c1410;
+}
+
+.paywall-notice-box p {
+  font-size: 0.8rem;
+  color: #6b5d4a;
+  margin: 0 0 1rem 0;
+  line-height: 1.5;
+}
+
+.paywall-action-btn {
+  background-color: #c8922a;
+  color: #ffffff;
+  border: none;
+  border-radius: 0.55rem;
+  padding: 0.6rem 1.1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.paywall-action-btn:hover {
+  background-color: #b07f22;
+}
+
+/* ============================================================================
+   DOWNLOAD / BILLING MODAL
+   ============================================================================ */
+.modal-content--billing {
+  max-width: 440px;
+}
+
+.billing-subtitle {
+  font-size: 0.8rem;
+  color: #8a7c66;
+  margin: -0.75rem 0 1.25rem 0;
+}
+
+.billing-receipt-card {
+  background-color: #f7f4ec;
+  border: 1px solid #ece4d3;
+  border-radius: 0.7rem;
+  padding: 1.1rem 1.25rem;
+  margin-bottom: 1.25rem;
+}
+
+.receipt-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.4rem 0;
+  font-size: 0.825rem;
+  color: #4a3f30;
+}
+
+.badge-highlight {
+  background-color: #f3d9a4;
+  color: #1c1410;
+  padding: 0.15rem 0.55rem;
+  border-radius: 999px;
+  font-weight: 600;
+  font-size: 0.75rem;
+}
+
+.receipt-divider {
+  border: none;
+  border-top: 1px solid #e3dcc9;
+  margin: 0.5rem 0;
+}
+
+.total-amount-line {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1c1410;
+}
+
+.payment-gateways-container h4 {
+  font-size: 0.8rem;
+  font-weight: 700;
+  color: #4a3f30;
+  margin: 0 0 0.75rem 0;
+}
+
+.gateway-buttons-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.pay-btn-telebirr,
+.pay-btn-cbe {
+  border: 1px solid #e3dcc9;
+  border-radius: 0.6rem;
+  padding: 0.65rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background-color: #ffffff;
+  color: #4a3f30;
+  cursor: pointer;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.pay-btn-telebirr:hover,
+.pay-btn-cbe:hover {
+  background-color: #f7f4ec;
+  border-color: #c8922a;
+}
+
+/* ============================================================================
+   RESPONSIVE
+   ============================================================================ */
+@media (max-width: 900px) {
+  .dashboard-container-gold {
+    flex-direction: column;
+  }
+  .dashboard-sidebar-gold {
+    width: 100%;
+    order: -1;
+  }
+  .info-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 540px) {
+  .dashboard-main-gold {
+    padding: 1.25rem;
+  }
+  .book-card-gold {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .book-actions {
+    align-items: stretch;
+  }
+  .form-row-dual,
+  .gateway-buttons-grid {
+    grid-template-columns: 1fr;
+  }
+}
+/* ==========================================================================
+   UNRESTRICTED FULL PAGE VIEWER MODAL FIXED STYLES
+   ========================================================================== */
+
+/* Target the wrapper content layout when viewing documents */
+.modal-content.modal-content--viewer {
+  max-width: 1200px !important;
+  width: 95% !important;
+  height: 90vh !important;       /* Forces the entire modal container to take up 90% of screen height */
+  display: flex !important;
+  flex-direction: column !important;
+  background-color: #ffffff !important;
+  border-radius: 8px !important;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3) !important;
+  padding: 20px !important;
+}
+
+/* Ensure the header bar doesn't shrink and remains clean */
+.viewer-header {
+  flex-shrink: 0 !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  padding-bottom: 12px !important;
+  border-bottom: 1px solid #e2e8f0 !important;
+}

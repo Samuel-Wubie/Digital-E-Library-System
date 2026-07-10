@@ -1,0 +1,410 @@
+/* ============================================================================
+   GIE / EGI ADMIN CONSOLE — STYLESHEET
+   Scoped entirely under .admin-dashboard-root so it never leaks into the
+   rest of the app. Covers every utility class used in AdminDashboard.js,
+   plus deliberate visual polish: depth via soft shadows, a considered color
+   rhythm (slate base + amber/blue/emerald/violet accents tied to meaning),
+   smooth transitions, and refined spacing instead of flat utility boxes.
+   ============================================================================ */
+
+.admin-dashboard-root {
+  display: flex;
+  flex-direction: row;
+  min-height: 100vh;
+  width: 100%;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  background-color: #f7f8fa;
+  color: #0f172a;
+  box-sizing: border-box;
+  -webkit-font-smoothing: antialiased;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.admin-dashboard-root *,
+.admin-dashboard-root *::before,
+.admin-dashboard-root *::after {
+  box-sizing: inherit;
+}
+
+.admin-dashboard-root button {
+  font-family: inherit;
+  cursor: pointer;
+  border: none;
+  background: none;
+  color: inherit;
+}
+
+.admin-dashboard-root input,
+.admin-dashboard-root select {
+  font-family: inherit;
+  font-size: inherit;
+  color: inherit;
+}
+
+.admin-dashboard-root table {
+  border-collapse: collapse;
+}
+
+/* ============================================================================
+   LAYOUT PRIMITIVES
+   ============================================================================ */
+.admin-dashboard-root .flex            { display: flex; }
+.admin-dashboard-root .inline-flex     { display: inline-flex; align-items: center; }
+.admin-dashboard-root .grid            { display: grid; gap: 1rem; width: 100%; }
+.admin-dashboard-root .flex-col        { flex-direction: column; }
+.admin-dashboard-root .flex-1          { flex: 1 1 0%; }
+.admin-dashboard-root .flex-shrink-0   { flex-shrink: 0; }
+.admin-dashboard-root .flex-wrap       { flex-wrap: wrap; }
+.admin-dashboard-root .min-w-0         { min-width: 0; }
+.admin-dashboard-root .min-h-screen    { min-height: 100vh; }
+.admin-dashboard-root .w-full          { width: 100%; }
+.admin-dashboard-root .h-full          { height: 100%; }
+.admin-dashboard-root .overflow-hidden { overflow: hidden; }
+.admin-dashboard-root .overflow-y-auto { overflow-y: auto; }
+.admin-dashboard-root .overflow-x-auto { overflow-x: auto; }
+.admin-dashboard-root .relative        { position: relative; }
+.admin-dashboard-root .absolute        { position: absolute; }
+.admin-dashboard-root .truncate        { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.admin-dashboard-root .cursor-pointer  { cursor: pointer; }
+.admin-dashboard-root .appearance-none { appearance: none; -webkit-appearance: none; }
+.admin-dashboard-root .capitalize      { text-transform: capitalize; }
+
+.admin-dashboard-root .items-center   { align-items: center; }
+.admin-dashboard-root .items-start    { align-items: flex-start; }
+.admin-dashboard-root .items-end      { align-items: flex-end; }
+.admin-dashboard-root .justify-center { justify-content: center; }
+.admin-dashboard-root .justify-between{ justify-content: space-between; }
+.admin-dashboard-root .text-left      { text-align: left; }
+.admin-dashboard-root .text-center    { text-align: center; }
+
+/* Grid templates */
+.admin-dashboard-root .grid-cols-1 { grid-template-columns: repeat(1, minmax(0, 1fr)); }
+.admin-dashboard-root .grid-cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@media (min-width: 768px) {
+  .admin-dashboard-root .md\:grid-cols-4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+}
+@media (min-width: 1024px) {
+  .admin-dashboard-root .lg\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .admin-dashboard-root .lg\:col-span-2  { grid-column: span 2 / span 2; }
+}
+
+/* Positioning offsets */
+.admin-dashboard-root .top-1        { top: 0.25rem; }
+.admin-dashboard-root .top-1\/2     { top: 50%; }
+.admin-dashboard-root .left-2\.5    { left: 0.625rem; }
+.admin-dashboard-root .right-1\.5   { right: 0.375rem; }
+.admin-dashboard-root .-translate-y-1\/2 { transform: translateY(-50%); }
+
+/* Sizing */
+.admin-dashboard-root .w-1\.5  { width: 0.375rem; }
+.admin-dashboard-root .w-3    { width: 0.75rem; }
+.admin-dashboard-root .w-3\.5 { width: 0.875rem; }
+.admin-dashboard-root .w-4    { width: 1rem; }
+.admin-dashboard-root .w-5    { width: 1.25rem; }
+.admin-dashboard-root .w-7    { width: 1.75rem; }
+.admin-dashboard-root .w-8    { width: 2rem; }
+.admin-dashboard-root .w-9    { width: 2.25rem; }
+.admin-dashboard-root .w-48   { width: 12rem; }
+.admin-dashboard-root .w-56   { width: 14rem; }
+.admin-dashboard-root .w-60   { width: 15rem; }
+
+.admin-dashboard-root .h-1\.5  { height: 0.375rem; }
+.admin-dashboard-root .h-3\.5  { height: 0.875rem; }
+.admin-dashboard-root .h-4     { height: 1rem; }
+.admin-dashboard-root .h-5     { height: 1.25rem; }
+.admin-dashboard-root .h-7     { height: 1.75rem; }
+.admin-dashboard-root .h-8     { height: 2rem; }
+.admin-dashboard-root .h-9     { height: 2.25rem; }
+.admin-dashboard-root .h-32    { height: 8rem; }
+.admin-dashboard-root .max-h-\[480px\] { max-height: 480px; }
+.admin-dashboard-root .max-w-\[28px\]  { max-width: 28px; }
+.admin-dashboard-root .max-w-\[80px\]  { max-width: 80px; }
+
+/* ============================================================================
+   SPACING — gap / padding / margin
+   ============================================================================ */
+.admin-dashboard-root .gap-0   { gap: 0; }
+.admin-dashboard-root .gap-1   { gap: 0.25rem; }
+.admin-dashboard-root .gap-1\.5{ gap: 0.375rem; }
+.admin-dashboard-root .gap-2   { gap: 0.5rem; }
+.admin-dashboard-root .gap-2\.5{ gap: 0.625rem; }
+.admin-dashboard-root .gap-3   { gap: 0.75rem; }
+.admin-dashboard-root .gap-4   { gap: 1rem; }
+.admin-dashboard-root .gap-6   { gap: 1.5rem; }
+
+.admin-dashboard-root .p-4  { padding: 1rem; }
+.admin-dashboard-root .p-5  { padding: 1.25rem; }
+.admin-dashboard-root .p-6  { padding: 1.5rem; }
+.admin-dashboard-root .px-1\.5 { padding-left: 0.375rem; padding-right: 0.375rem; }
+.admin-dashboard-root .px-2    { padding-left: 0.5rem;   padding-right: 0.5rem; }
+.admin-dashboard-root .px-2\.5 { padding-left: 0.625rem; padding-right: 0.625rem; }
+.admin-dashboard-root .px-3    { padding-left: 0.75rem;  padding-right: 0.75rem; }
+.admin-dashboard-root .px-5    { padding-left: 1.25rem;  padding-right: 1.25rem; }
+.admin-dashboard-root .px-6    { padding-left: 1.5rem;   padding-right: 1.5rem; }
+.admin-dashboard-root .py-0\.5 { padding-top: 0.125rem;  padding-bottom: 0.125rem; }
+.admin-dashboard-root .py-1    { padding-top: 0.25rem;   padding-bottom: 0.25rem; }
+.admin-dashboard-root .py-1\.5 { padding-top: 0.375rem;  padding-bottom: 0.375rem; }
+.admin-dashboard-root .py-2    { padding-top: 0.5rem;    padding-bottom: 0.5rem; }
+.admin-dashboard-root .py-3    { padding-top: 0.75rem;   padding-bottom: 0.75rem; }
+.admin-dashboard-root .py-3\.5 { padding-top: 0.875rem;  padding-bottom: 0.875rem; }
+.admin-dashboard-root .py-4    { padding-top: 1rem;      padding-bottom: 1rem; }
+.admin-dashboard-root .py-5    { padding-top: 1.25rem;   padding-bottom: 1.25rem; }
+.admin-dashboard-root .py-12   { padding-top: 3rem;      padding-bottom: 3rem; }
+.admin-dashboard-root .pl-8    { padding-left: 2rem; }
+.admin-dashboard-root .pr-3    { padding-right: 0.75rem; }
+.admin-dashboard-root .pr-4    { padding-right: 1rem; }
+.admin-dashboard-root .pt-4    { padding-top: 1rem; }
+
+.admin-dashboard-root .mb-1  { margin-bottom: 0.25rem; }
+.admin-dashboard-root .mb-4  { margin-bottom: 1rem; }
+.admin-dashboard-root .mt-0\.5{ margin-top: 0.125rem; }
+.admin-dashboard-root .mt-1  { margin-top: 0.25rem; }
+.admin-dashboard-root .mt-2  { margin-top: 0.5rem; }
+.admin-dashboard-root .mt-4  { margin-top: 1rem; }
+
+/* ============================================================================
+   TYPOGRAPHY
+   ============================================================================ */
+.admin-dashboard-root .font-mono     { font-family: 'SF Mono', ui-monospace, 'Courier New', monospace; }
+.admin-dashboard-root .font-sans     { font-family: 'Inter', ui-sans-serif, system-ui, sans-serif; }
+.admin-dashboard-root .font-medium   { font-weight: 500; }
+.admin-dashboard-root .font-semibold { font-weight: 600; }
+.admin-dashboard-root .leading-tight { line-height: 1.25; }
+
+.admin-dashboard-root .text-\[10px\] { font-size: 10px; }
+.admin-dashboard-root .text-\[11px\] { font-size: 11px; }
+.admin-dashboard-root .text-xs   { font-size: 0.75rem;  line-height: 1.2; }
+.admin-dashboard-root .text-sm   { font-size: 0.8125rem; line-height: 1.45; }
+.admin-dashboard-root .text-base { font-size: 0.9375rem; line-height: 1.4; }
+.admin-dashboard-root .text-2xl  { font-size: 1.5rem; line-height: 1.25; letter-spacing: -0.01em; }
+
+.admin-dashboard-root .text-white       { color: #ffffff; }
+.admin-dashboard-root .text-slate-400   { color: #94a3b8; }
+.admin-dashboard-root .text-slate-500   { color: #64748b; }
+.admin-dashboard-root .text-slate-600   { color: #475569; }
+.admin-dashboard-root .text-slate-700   { color: #334155; }
+.admin-dashboard-root .text-slate-800   { color: #1e293b; }
+.admin-dashboard-root .text-slate-900   { color: #0f172a; }
+.admin-dashboard-root .text-amber-600   { color: #d97706; }
+.admin-dashboard-root .text-amber-800   { color: #92400e; }
+.admin-dashboard-root .text-emerald-700 { color: #047857; }
+.admin-dashboard-root .text-red-500     { color: #ef4444; }
+.admin-dashboard-root .text-red-700     { color: #b91c1c; }
+
+/* ============================================================================
+   SURFACES, BORDERS, RADIUS — this is where "flat" becomes "designed":
+   layered shadows instead of harsh outlines, softened border tones.
+   ============================================================================ */
+.admin-dashboard-root .bg-white       { background-color: #ffffff; }
+.admin-dashboard-root .bg-transparent { background-color: transparent; }
+.admin-dashboard-root .bg-slate-50    { background-color: #f8fafc; }
+.admin-dashboard-root .bg-slate-100   { background-color: #f1f5f9; }
+.admin-dashboard-root .bg-slate-900   { background-color: #0f172a; }
+.admin-dashboard-root .bg-blue-500    { background-color: #3b82f6; }
+.admin-dashboard-root .bg-amber-50    { background-color: #fffbeb; }
+.admin-dashboard-root .bg-amber-500   { background-color: #f59e0b; }
+.admin-dashboard-root .bg-emerald-50  { background-color: #ecfdf5; }
+.admin-dashboard-root .bg-emerald-500 { background-color: #10b981; }
+.admin-dashboard-root .bg-red-50      { background-color: #fef2f2; }
+.admin-dashboard-root .bg-red-500     { background-color: #ef4444; }
+.admin-dashboard-root .bg-red-600     { background-color: #dc2626; }
+
+.admin-dashboard-root .border          { border: 1px solid #e7eaee; }
+.admin-dashboard-root .border-t        { border-top: 1px solid #e7eaee; }
+.admin-dashboard-root .border-b        { border-bottom: 1px solid #e7eaee; }
+.admin-dashboard-root .border-slate-100{ border-color: #f1f5f9; }
+.admin-dashboard-root .border-slate-200{ border-color: #e7eaee; }
+.admin-dashboard-root .border-white\/10{ border-color: rgba(255,255,255,0.1); }
+.admin-dashboard-root .border-amber-200{ border-color: #fde68a; }
+.admin-dashboard-root .border-emerald-200{ border-color: #a7f3d0; }
+.admin-dashboard-root .border-red-200  { border-color: #fecaca; }
+
+.admin-dashboard-root .divide-y > * + * { border-top: 1px solid #f1f5f9; }
+.admin-dashboard-root .divide-slate-100 > * + * { border-color: #f1f5f9; }
+
+.admin-dashboard-root .rounded-full { border-radius: 9999px; }
+.admin-dashboard-root .rounded-lg   { border-radius: 0.625rem; }
+.admin-dashboard-root .rounded-xl   { border-radius: 0.875rem; }
+.admin-dashboard-root .rounded-t-md { border-top-left-radius: 0.5rem; border-top-right-radius: 0.5rem; }
+
+/* Card / panel surfaces get a soft, deliberate shadow instead of a flat
+   border-only look — this is the single change that reads as "designed". */
+.admin-dashboard-root .bg-white.rounded-xl,
+.admin-dashboard-root .bg-white.rounded-lg {
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04), 0 1px 1px rgba(15, 23, 42, 0.03);
+  transition: box-shadow 0.2s ease, transform 0.15s ease;
+}
+
+/* ============================================================================
+   INTERACTIVE STATES — smooth, deliberate, never abrupt
+   ============================================================================ */
+.admin-dashboard-root .focus\:outline-none { outline: none; }
+.admin-dashboard-root .focus\:ring-2:focus { box-shadow: 0 0 0 3px var(--ring-color, rgba(59,130,246,0.18)); }
+.admin-dashboard-root .focus\:ring-blue-200:focus { --ring-color: rgba(59,130,246,0.18); border-color: #93c5fd; }
+.admin-dashboard-root .focus\:ring-red-200:focus  { --ring-color: rgba(239,68,68,0.18);  border-color: #fca5a5; }
+
+.admin-dashboard-root .hover\:bg-slate-50:hover     { background-color: #f8fafc; }
+.admin-dashboard-root .hover\:bg-slate-50\/60:hover { background-color: rgba(248,250,252,0.7); }
+.admin-dashboard-root .hover\:bg-emerald-100:hover  { background-color: #d1fae5; }
+.admin-dashboard-root .hover\:bg-red-100:hover      { background-color: #fee2e2; }
+.admin-dashboard-root .hover\:bg-red-700:hover       { background-color: #b91c1c; }
+.admin-dashboard-root .hover\:text-slate-600:hover  { color: #475569; }
+
+.admin-dashboard-root button,
+.admin-dashboard-root select,
+.admin-dashboard-root input {
+  transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.admin-dashboard-root input,
+.admin-dashboard-root select {
+  border: 1px solid #e7eaee;
+  background-color: #ffffff;
+}
+
+/* ============================================================================
+   SIDEBAR — deep slate console rail with a subtle inner highlight on
+   the active nav item, rather than a flat color swap
+   ============================================================================ */
+.admin-dashboard-root > aside {
+  width: 15rem;
+  background: linear-gradient(180deg, #0f172a 0%, #0b1120 100%);
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  box-shadow: 2px 0 12px rgba(0,0,0,0.08);
+  z-index: 10;
+}
+
+.admin-dashboard-root > aside nav button {
+  width: 100%;
+  text-align: left;
+  border-radius: 0.625rem;
+  padding: 0.625rem 0.75rem;
+  color: #94a3b8;
+}
+
+.admin-dashboard-root > aside nav button:hover {
+  background-color: rgba(255,255,255,0.06);
+  color: #e2e8f0;
+}
+
+.admin-dashboard-root > aside nav button.bg-white\/10 {
+  background-color: rgba(255,255,255,0.1);
+  color: #ffffff;
+  box-shadow: inset 0 0 0 1px rgba(255,255,255,0.06);
+}
+
+.admin-dashboard-root > aside .bg-blue-500 {
+  background: linear-gradient(135deg, #3b82f6, #2563eb);
+  box-shadow: 0 2px 8px rgba(59,130,246,0.35);
+}
+
+.admin-dashboard-root > aside .bg-emerald-500 {
+  background: linear-gradient(135deg, #10b981, #059669);
+}
+
+/* ============================================================================
+   HEADER / TOPBAR
+   ============================================================================ */
+.admin-dashboard-root header {
+  background-color: #ffffff;
+  border-bottom: 1px solid #eceff2;
+  box-shadow: 0 1px 0 rgba(15,23,42,0.02);
+}
+
+/* ============================================================================
+   TABLES — calmer header treatment than uppercase-shout; clearer row rhythm
+   ============================================================================ */
+.admin-dashboard-root table th {
+  background-color: #f8fafc;
+  color: #64748b;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid #e7eaee;
+}
+
+.admin-dashboard-root table td {
+  padding: 0.75rem 1.25rem;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.admin-dashboard-root table tr:last-child td {
+  border-bottom: none;
+}
+
+/* ============================================================================
+   ROLE / STATUS / RESPONSIBILITY TOKEN COLORS
+   Each role and stage keeps one consistent hue throughout the whole app —
+   this is what makes the maker/checker/authorizer pipeline readable at a
+   glance instead of requiring the user to read every label.
+   ============================================================================ */
+.admin-dashboard-root .bg-slate-100   { background-color: #f1f5f9; }
+.admin-dashboard-root .text-slate-700 { color: #334155; }
+
+.admin-dashboard-root .bg-blue-50     { background-color: #eff6ff; }
+.admin-dashboard-root .text-blue-700  { color: #1d4ed8; }
+
+.admin-dashboard-root .bg-violet-50   { background-color: #f5f3ff; }
+.admin-dashboard-root .text-violet-700{ color: #6d28d9; }
+
+.admin-dashboard-root .bg-emerald-50  { background-color: #ecfdf5; }
+
+.admin-dashboard-root .bg-amber-50    { background-color: #fffbeb; }
+.admin-dashboard-root .text-amber-700 { color: #b45309; }
+
+.admin-dashboard-root .bg-red-50      { background-color: #fef2f2; }
+.admin-dashboard-root .text-red-700   { color: #b91c1c; }
+
+/* ============================================================================
+   MISC FIXED UTILITY VALUES used inline alongside Tailwind-style classes
+   ============================================================================ */
+.admin-dashboard-root .border-slate-300 { border-color: #cbd5e1; }
+.admin-dashboard-root .bg-slate-300     { background-color: #cbd5e1; }
+.admin-dashboard-root .bg-slate-200     { background-color: #e2e8f0; }
+
+/* Scrollbar polish inside scroll containers (audit log, etc.) */
+.admin-dashboard-root .overflow-y-auto::-webkit-scrollbar {
+  width: 8px;
+}
+.admin-dashboard-root .overflow-y-auto::-webkit-scrollbar-track {
+  background: transparent;
+}
+.admin-dashboard-root .overflow-y-auto::-webkit-scrollbar-thumb {
+  background-color: #e2e8f0;
+  border-radius: 8px;
+}
+.admin-dashboard-root .overflow-y-auto::-webkit-scrollbar-thumb:hover {
+  background-color: #cbd5e1;
+}
+
+/* ============================================================================
+   CLICKABLE STAT CARDS — Active users / New accounts / Audit events open a
+   detail modal (see StatDetailModal.js/.css). Pending approvals stays
+   non-interactive since that count already has its own dedicated queue tab.
+   ============================================================================ */
+.admin-dashboard-root .stat-card-clickable {
+  cursor: pointer;
+  transition: box-shadow 0.18s ease, transform 0.12s ease, border-color 0.18s ease;
+}
+
+.admin-dashboard-root .stat-card-clickable:hover {
+  box-shadow: 0 8px 20px rgba(15, 23, 42, 0.08), 0 2px 6px rgba(15, 23, 42, 0.06);
+  border-color: #cbd5e1;
+  transform: translateY(-1px);
+}
+
+.admin-dashboard-root .stat-card-clickable:active {
+  transform: translateY(0);
+}
+
+.admin-dashboard-root .stat-card-clickable:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
+}

@@ -1,0 +1,192 @@
+/* ==========================================================================
+   GEOLOGICAL INSTITUTE OF ETHIOPIA - E-LIBRARY PORTAL STYLES
+   ========================================================================== */
+
+/* ── MAIN PORTAL WRAPPER ── */
+.library-login-wrap {
+  display: flex;
+  max-width: 1200px;
+  width: 95%;
+  margin: 50px auto;
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.06);
+  overflow: hidden;
+  min-height: 580px;
+  border: 1px solid #eaeaea;
+  box-sizing: border-box;
+}
+
+/* ── LEFT COLUMN: INSTITUTIONAL BRAND PANEL ── */
+.library-login-image {
+  flex: 1.1;
+  background: linear-gradient(135deg, #004d30 0%, #002b1b 100%);
+  padding: 60px 45px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  position: relative;
+}
+
+/* Geometric background pattern texture overlay */
+.library-login-image::before {
+  content: "";
+  position: absolute;
+  top: 0; 
+  left: 0; 
+  right: 0; 
+  bottom: 0;
+  opacity: 0.07;
+  background-image: radial-gradient(circle at 1px 1px, white 1px, transparent 0);
+  background-size: 24px 24px;
+  z-index: 1;
+}
+
+.library-login-overlay {
+  position: relative;
+  z-index: 2;
+}
+
+.library-login-overlay h3 {
+  font-size: 2.2rem;
+  color: #c89b2b;
+  margin-bottom: 15px;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.library-login-overlay p {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  color: #e6f0ec;
+  opacity: 0.95;
+  margin: 0;
+}
+
+/* ── RIGHT COLUMN: CLEAN INTERACTIVE LOGIN CARD ── */
+.library-login-card {
+  flex: 0.9;
+  padding: 60px 50px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  background: #ffffff;
+  box-sizing: border-box;
+}
+
+.library-login-card h2 {
+  font-size: 2.1rem;
+  color: #1a1a1a;
+  margin: 0 0 8px 0;
+  font-weight: 700;
+  letter-spacing: -0.5px;
+}
+
+.library-login-subtitle {
+  color: #666666;
+  font-size: 0.95rem;
+  margin: 0 0 35px 0;
+  line-height: 1.5;
+}
+
+/* ── FORM CONTROL LAYOUTS ── */
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.login-form input {
+  width: 100%;
+  padding: 14px 18px;
+  border: 1px solid #dcdcdc;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  background-color: #fcfcfc;
+  transition: all 0.2s ease-in-out;
+  box-sizing: border-box;
+  color: #333333;
+}
+
+/* Focused input highlight ring */
+.login-form input:focus {
+  outline: none;
+  border-color: #004d30;
+  background-color: #ffffff;
+  box-shadow: 0 0 0 4px rgba(0, 77, 48, 0.08);
+}
+
+/* Primary Action Button Button */
+.login-btn {
+  width: 100%;
+  padding: 15px;
+  background-color: #004d30;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  font-size: 1rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+  margin-top: 10px;
+  box-shadow: 0 4px 12px rgba(0, 77, 48, 0.15);
+}
+
+.login-btn:hover {
+  background-color: #003823;
+}
+
+/* Error Dynamic Container Alert */
+.login-error {
+  background-color: #fdf2f2;
+  color: #ec5959;
+  padding: 14px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  margin-bottom: 20px;
+  border: 1px solid #f8d7da;
+  font-weight: 500;
+}
+
+/* ── UTILITY LINKS & FOOTNOTE BUTTONS ── */
+.login-helpers {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-top: 20px;
+  padding-top: 20px;
+  border-top: 1px solid #f0f0f0;
+  gap: 15px;
+}
+
+.secondary-login-btn {
+  background: none;
+  border: none;
+  color: #004d30;
+  font-size: 0.88rem;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 5px 0;
+  transition: color 0.15s ease;
+}
+
+.secondary-login-btn:hover {
+  color: #c89b2b;
+  text-decoration: underline;
+}
+
+/* ── RESPONSIVE RESPONSIVENESS BREAKPOINT BREAKPOINTS ── */
+@media (max-width: 900px) {
+  .library-login-wrap {
+    flex-direction: column;
+    min-height: auto;
+    margin: 20px auto;
+  }
+  .library-login-image {
+    padding: 40px 30px;
+    min-height: 220px;
+  }
+  .library-login-card {
+    padding: 40px 30px;
+  }
+}
