@@ -21,11 +21,15 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 const storage = multer.diskStorage({
-  destination: (req, file, cb) => { cb(null, 'uploades/'); },
-  filename: (req, file, cb) => { 
+  // FIXED: use the absolute uploadDir instead of a relative 'uploades/' path,
+  // which resolved against process.cwd() (wherever `node` was launched from)
+  // instead of always this back-end folder — causing uploads to sometimes
+  // land outside the folder express.static() actually serves.
+  destination: (req, file, cb) => { cb(null, uploadDir); },
+  filename: (req, file, cb) => {
     // Replaces physical spaces with dashes to guarantee trouble-free browser routing URL strings
     const cleanedName = file.originalname.replace(/\s+/g, '-');
-    cb(null, Date.now() + '-' + cleanedName); 
+    cb(null, Date.now() + '-' + cleanedName);
   }
 });
 const upload = multer({ storage });
@@ -60,12 +64,6 @@ app.use('/uploades', (req, res, next) => {
 // CORE SYSTEM CONFIGURATION & ROUTING HELPERS
 // ============================================================================
 const STAGE_ORDER = ['officer', 'senior_officer', 'authorizer'];
-
-const STAGE_ROLE_LABELS = {
-  officer: 'Officer',
-  senior_officer: 'Senior Officer',
-  authorizer: 'Department Head',
-};
 
 async function writeAuditLog(userId, action, detail, severity = 'info') {
   try {
@@ -427,9 +425,38 @@ app.put('/api/users/:id/status', async (req, res) => {
 // 7. BOOKS / RECORDS
 // ============================================================================
 
+// --- SEARCH (FIXED: now applies title/author/department/location/year filters
+// from the query string instead of always returning every row) ---
 app.get('/api/books/search', async (req, res) => {
+  const { title, author, department, location, year } = req.query;
   try {
-    const result = await pool.query('SELECT * FROM books ORDER BY id ASC');
+    let query = 'SELECT * FROM books WHERE 1=1';
+    const values = [];
+
+    if (title) {
+      values.push(`%${title}%`);
+      query += ` AND title ILIKE $${values.length}`;
+    }
+    if (author) {
+      values.push(`%${author}%`);
+      query += ` AND author ILIKE $${values.length}`;
+    }
+    if (department) {
+      values.push(department);
+      query += ` AND department = $${values.length}`;
+    }
+    if (location) {
+      values.push(location);
+      query += ` AND location = $${values.length}`;
+    }
+    if (year) {
+      values.push(parseInt(year, 10));
+      query += ` AND published_year = $${values.length}`;
+    }
+
+    query += ' ORDER BY id ASC';
+
+    const result = await pool.query(query, values);
     res.json(result.rows);
   } catch (err) {
     console.error(err.message);
@@ -537,7 +564,6 @@ app.get('/api/audit-logs', async (req, res) => {
 // --- WORKFLOW STAGE RESPONSIBILITY DEFINITIONS ---
 app.get('/api/access-control/responsibility', async (req, res) => {
   try {
-    // FIXED: references correct columns 'config_data' and 'setting_key'
     const result = await pool.query("SELECT config_data FROM system_settings WHERE setting_key = 'responsibility_map'");
     if (result.rows.length > 0) {
       res.json(result.rows[0].config_data);
@@ -553,7 +579,6 @@ app.get('/api/access-control/responsibility', async (req, res) => {
 app.put('/api/access-control/responsibility', async (req, res) => {
   try {
     const { responsibility, changedBy } = req.body;
-    // FIXED: writes using 'setting_key' and 'config_data' to eliminate column layout crashes
     await pool.query(
       `INSERT INTO system_settings (setting_key, config_data, updated_at) 
        VALUES ('responsibility_map', $1, NOW())
@@ -571,7 +596,6 @@ app.put('/api/access-control/responsibility', async (req, res) => {
 // --- DYNAMIC PERMISSIONS ACCESS MATRIX SYSTEM ---
 app.get('/api/permissions', async (req, res) => {
   try {
-    // FIXED: queries 'config_data' and 'setting_key' instead of historical placeholders
     const result = await pool.query("SELECT config_data FROM system_settings WHERE setting_key = 'access_matrix'");
     if (result.rows.length > 0) {
       res.json(result.rows[0].config_data);
@@ -587,7 +611,6 @@ app.get('/api/permissions', async (req, res) => {
 app.put('/api/permissions', async (req, res) => {
   try {
     const { matrix, changedBy } = req.body;
-    // FIXED: writes directly to 'setting_key' and 'config_data' matching schema setup perfectly
     await pool.query(
       `INSERT INTO system_settings (setting_key, config_data, updated_at) 
        VALUES ('access_matrix', $1, NOW())
@@ -787,7 +810,10 @@ app.put('/api/office-requests/:id/accept', async (req, res) => {
     }
 
     const result = await pool.query(updateQuery, [nextStage, actingUserId, id]);
-    const roleLabel = STAGE_ROLE_LABELS[reqRow.stage];
+    // Uses the dynamically resolved role for this stage (from resolveChainRoles/
+    // responsibility_map) instead of a hardcoded label, so the audit log reflects
+    // whatever role an admin actually assigned to this stage.
+    const roleLabel = expectedRoleForStage;
 
     await writeAuditLog(actingUserId, `Office Chain: ${roleLabel} Verified`, `Request ${reqRow.request_code} advanced from '${reqRow.stage}' to '${nextStage}'`, 'info');
 

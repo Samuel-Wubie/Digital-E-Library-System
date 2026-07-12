@@ -18,21 +18,18 @@ const FALLBACK_MATRIX = {
 // backend (the same one AdminDashboard's AccessControlMatrix reads/writes)
 // and returns a `can(permission)` checker scoped to the given role.
 //
-// Usage in any component:
-//   const { can, loading } = usePermissions(user?.role);
-//   if (can('edit')) { ... }
-//
-// This replaces hardcoded checks like `user.role === 'admin'` with the real,
-// admin-configurable matrix — so toggling Granted/Denied in Access Control
-// actually changes what Officers/Senior Officers/etc. can do everywhere
-// that calls this hook, instead of having no effect.
+// FIXED: was calling /api/access-control/matrix, which does not exist on
+// the server (server.js only defines GET/PUT /api/permissions). That 404
+// was silently swallowed by the .catch(), so every role was permanently
+// stuck on FALLBACK_MATRIX and admin edits in Access Control never took
+// effect anywhere that used this hook (Dashboard.js, OfficeDashboard.js).
 // ----------------------------------------------------------------------------
 export function usePermissions(role) {
   const [matrix, setMatrix] = useState(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetch(`${API}/api/access-control/matrix`)
+    fetch(`${API}/api/permissions`)
       .then(res => res.json())
       .then(data => {
         setMatrix(data || FALLBACK_MATRIX);

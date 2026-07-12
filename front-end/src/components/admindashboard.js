@@ -16,7 +16,16 @@ const API = "http://localhost:5000";
 // ---------------------------------------------------------------------------
 const ROLES = ["User", "Officer", "Senior Officer", "Department Head"];
 const PERMISSIONS = ["view", "edit", "delete", "download"];
-const RESPONSIBILITIES = ["Maker", "Checker", "Authorizer", "None"];
+
+// The 3-step approval chain, in order. This matches server.js's
+// STAGE_ORDER = ['officer', 'senior_officer', 'authorizer'] exactly —
+// these keys are not display labels, they are the wire format the backend
+// reads/writes under system_settings.responsibility_map.
+const STAGE_DEFS = [
+  { key: "officer",        label: "Officer (Step 1)" },
+  { key: "senior_officer", label: "Senior Officer (Step 2)" },
+  { key: "authorizer",     label: "Department Head (Step 3 — Final)" },
+];
 
 const ROLE_COLORS = {
   User:             { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-400" },
@@ -25,11 +34,10 @@ const ROLE_COLORS = {
   "Department Head":{ bg: "bg-emerald-50",text: "text-emerald-700",dot:"bg-emerald-500"},
 };
 
-const RESP_COLORS = {
-  Maker:      { bg: "bg-amber-50",  text: "text-amber-700",  border: "border-amber-300",  solid: "bg-amber-500"  },
-  Checker:    { bg: "bg-blue-50",   text: "text-blue-700",   border: "border-blue-300",   solid: "bg-blue-500"   },
-  Authorizer: { bg: "bg-emerald-50",text: "text-emerald-700",border: "border-emerald-300",solid: "bg-emerald-500"},
-  None:       { bg: "bg-slate-50",  text: "text-slate-500",  border: "border-slate-200",  solid: "bg-slate-300"  },
+const STAGE_COLORS = {
+  officer:        { bg: "bg-blue-50",   text: "text-blue-700",   border: "border-blue-300"   },
+  senior_officer: { bg: "bg-violet-50", text: "text-violet-700", border: "border-violet-300" },
+  authorizer:     { bg: "bg-emerald-50",text: "text-emerald-700",border: "border-emerald-300"},
 };
 
 const PERM_ICON = { view: Eye, edit: Pencil, delete: Trash2, download: Download };
@@ -41,9 +49,33 @@ const defaultMatrix = {
   "Department Head":{ view: true,  edit: true,  delete: true,  download: true  },
 };
 
+// Stage-keyed, matching resolveChainRoles()'s expected shape once converted
+// to an array on save: [{ stage: 'officer', role: 'Officer' }, ...]
 const defaultResponsibility = {
-  User: "None", Officer: "Maker", "Senior Officer": "Checker", "Department Head": "Authorizer",
+  officer: "Officer",
+  senior_officer: "Senior Officer",
+  authorizer: "Department Head",
 };
+
+// Converts the array format the server stores/returns
+// ([{ stage, role }, ...]) into the stage-keyed object this component
+// works with in state. Falls back to defaults for any missing stage.
+function arrayToResponsibilityMap(arr) {
+  if (!Array.isArray(arr)) return { ...defaultResponsibility };
+  const map = { ...defaultResponsibility };
+  arr.forEach(entry => {
+    if (entry && entry.stage && STAGE_DEFS.some(s => s.key === entry.stage)) {
+      map[entry.stage] = entry.role;
+    }
+  });
+  return map;
+}
+
+// Converts the stage-keyed object back into the array format the server
+// expects to persist under system_settings.responsibility_map.
+function responsibilityMapToArray(map) {
+  return STAGE_DEFS.map(s => ({ stage: s.key, role: map[s.key] }));
+}
 
 // ---------------------------------------------------------------------------
 // Shared small components
@@ -97,9 +129,9 @@ function StatCard({ icon: Icon, label, value, sub, accent, onClick }) {
 
 function ApprovalPipeline({ stage, checker, authorizer, requestedBy, size = "md" }) {
   const stages = [
-    { key: "maker",      label: "Maker",      who: requestedBy, color: RESP_COLORS.Maker      },
-    { key: "checker",    label: "Checker",    who: checker,     color: RESP_COLORS.Checker    },
-    { key: "authorizer", label: "Authorizer", who: authorizer,  color: RESP_COLORS.Authorizer },
+    { key: "maker",      label: "Maker",      who: requestedBy },
+    { key: "checker",    label: "Checker",    who: checker     },
+    { key: "authorizer", label: "Authorizer", who: authorizer  },
   ];
   const order = ["maker", "checker", "authorizer", "approved"];
   const small = size === "sm";
@@ -120,18 +152,18 @@ function ApprovalPipeline({ stage, checker, authorizer, requestedBy, size = "md"
           <React.Fragment key={s.key}>
             <div className="flex flex-col items-center gap-1" style={{ minWidth: small ? 64 : 84 }}>
               <div className={`flex items-center justify-center rounded-full border-2 ${small ? "w-7 h-7" : "w-9 h-9"} ${
-                isDone     ? `${s.color.solid} border-transparent` :
-                isActive   ? `bg-white ${s.color.border} ${s.color.text}` :
+                isDone     ? "bg-emerald-500 border-transparent" :
+                isActive   ? "bg-white border-blue-300 text-blue-700" :
                 isRejected ? "bg-red-500 border-transparent" :
                              "bg-slate-50 border-slate-200 text-slate-400"
               }`}>
                 {isDone ? <Check className="w-4 h-4 text-white" /> :
                  isRejected ? <X className="w-4 h-4 text-white" /> :
-                 isActive ? <Clock className={`w-4 h-4 ${s.color.text}`} /> :
+                 isActive ? <Clock className="w-4 h-4 text-blue-700" /> :
                  <span className="text-xs font-medium">{i + 1}</span>}
               </div>
               <div className={`text-center ${small ? "text-[10px]" : "text-xs"}`}>
-                <div className={`font-medium ${isActive ? s.color.text : isDone ? "text-slate-700" : "text-slate-400"}`}>{s.label}</div>
+                <div className={`font-medium ${isActive ? "text-blue-700" : isDone ? "text-slate-700" : "text-slate-400"}`}>{s.label}</div>
                 {!small && s.who && <div className="text-slate-400 truncate max-w-[80px]">{s.who}</div>}
               </div>
             </div>
@@ -253,11 +285,14 @@ function Overview({ currentUserId }) {
 // Access Control Matrix — persists changes to the backend
 // ---------------------------------------------------------------------------
 function AccessControlMatrix({ matrix, setMatrix, responsibility, setResponsibility, currentUserId }) {
+  // FIXED: was PUT /api/access-control/matrix (does not exist on the
+  // server — 404s were silently swallowed, so toggles never persisted).
+  // The real route is /api/permissions (see server.js section 9).
   const toggle = async (role, perm) => {
     const newMatrix = { ...matrix, [role]: { ...matrix[role], [perm]: !matrix[role][perm] } };
     setMatrix(newMatrix);
     try {
-      await fetch(`${API}/api/access-control/matrix`, {
+      await fetch(`${API}/api/permissions`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ matrix: newMatrix, changedBy: currentUserId }),
@@ -265,17 +300,26 @@ function AccessControlMatrix({ matrix, setMatrix, responsibility, setResponsibil
     } catch (err) { console.error("Failed to save matrix:", err); }
   };
 
-  // RE-ENGINEERED: Persists Maker-Checker administrative assignment layers downstream to Backend Controllers
-  const changeResponsibility = async (role, resp) => {
-    const updatedResponsibility = { ...responsibility, [role]: resp };
+  // FIXED: previously stored a role-keyed shape
+  // ({ Officer: 'Maker', ... }) that the backend's resolveChainRoles()
+  // could never parse (it reads an array of { stage, role } keyed by
+  // workflow STAGE, not by role). Now each of the 3 chain stages
+  // (officer / senior_officer / authorizer) is assigned to whichever ROLE
+  // should handle it, and that stage-keyed object is converted to the
+  // array format on save.
+  const assignStageRole = async (stageKey, role) => {
+    const updatedResponsibility = { ...responsibility, [stageKey]: role };
     setResponsibility(updatedResponsibility);
     try {
       await fetch(`${API}/api/access-control/responsibility`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ responsibility: updatedResponsibility, changedBy: currentUserId }),
+        body: JSON.stringify({
+          responsibility: responsibilityMapToArray(updatedResponsibility),
+          changedBy: currentUserId,
+        }),
       });
-    } catch (err) { console.error("Failed to persist operational workflow configuration changes:", err); }
+    } catch (err) { console.error("Failed to persist workflow responsibility:", err); }
   };
 
   return (
@@ -284,7 +328,7 @@ function AccessControlMatrix({ matrix, setMatrix, responsibility, setResponsibil
         <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
           <div>
             <h3 className="text-sm font-semibold text-slate-900">Dynamic access control</h3>
-            <p className="text-xs text-slate-500 mt-0.5">Click a permission button to grant or revoke it for a role, instantly.</p>
+            <p className="text-xs text-slate-500 mt-0.5">Click a permission button to grant or revoke it for a role, instantly. "Add" uses the same permission as "edit".</p>
           </div>
           <ShieldCheck className="w-5 h-5 text-slate-400" />
         </div>
@@ -327,26 +371,29 @@ function AccessControlMatrix({ matrix, setMatrix, responsibility, setResponsibil
       <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
         <div className="px-5 py-4 border-b border-slate-100">
           <h3 className="text-sm font-semibold text-slate-900">Workflow responsibility</h3>
-          <p className="text-xs text-slate-500 mt-0.5">Who initiates (maker), reviews (checker), and approves (authorizer) sensitive actions for each role.</p>
+          <p className="text-xs text-slate-500 mt-0.5">Assign which role reviews each of the 3 approval steps. "Maker" is not assigned here — anyone who submits a request acts as the maker for that request.</p>
         </div>
         <div className="divide-y divide-slate-100">
-          {ROLES.map(role => (
-            <div key={role} className="px-5 py-3 flex items-center justify-between flex-wrap gap-3">
-              <RoleBadge role={role} />
-              <div className="flex items-center gap-2">
-                {RESPONSIBILITIES.map(r => (
-                  <button key={r}
-                    onClick={() => changeResponsibility(role, r)}
-                    className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
-                      responsibility[role] === r
-                        ? `${RESP_COLORS[r].bg} ${RESP_COLORS[r].text} ${RESP_COLORS[r].border}`
-                        : "bg-white text-slate-400 border-slate-200 hover:bg-slate-50"}`}>
-                    {r}
-                  </button>
-                ))}
+          {STAGE_DEFS.map(stageDef => {
+            const c = STAGE_COLORS[stageDef.key];
+            return (
+              <div key={stageDef.key} className="px-5 py-3 flex items-center justify-between flex-wrap gap-3">
+                <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${c.bg} ${c.text}`}>{stageDef.label}</span>
+                <div className="flex items-center gap-2">
+                  {ROLES.map(role => (
+                    <button key={role}
+                      onClick={() => assignStageRole(stageDef.key, role)}
+                      className={`px-3 py-1.5 rounded-lg text-xs font-medium border transition-colors ${
+                        responsibility[stageDef.key] === role
+                          ? `${c.bg} ${c.text} ${c.border}`
+                          : "bg-white text-slate-400 border-slate-200 hover:bg-slate-50"}`}>
+                      {role}
+                    </button>
+                  ))}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
@@ -457,6 +504,11 @@ function UserManagement({ currentUserId }) {
 
 // ---------------------------------------------------------------------------
 // Approval Queue — fetches from API, persists advance/reject to backend
+//
+// NOTE: server.js exposes /api/office-requests (not /api/approval-requests),
+// and stages are 'officer' | 'senior_officer' | 'authorizer' | 'approved' |
+// 'rejected' (not 'checker'/'authorizer' only). This mirrors OfficeDashboard.js,
+// which already targets the correct endpoints/stage names.
 // ---------------------------------------------------------------------------
 function ApprovalQueue({ currentUser }) {
   const [requests, setRequests] = useState([]);
@@ -466,16 +518,16 @@ function ApprovalQueue({ currentUser }) {
   const [rejectReason, setRejectReason] = useState("");
 
   const fetchRequests = () => {
-    fetch(`${API}/api/approval-requests`)
+    fetch(`${API}/api/office-requests`)
       .then(r => r.json())
-      .then(data => { setRequests(data); setLoading(false); })
+      .then(data => { setRequests(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(err => { console.error(err); setLoading(false); });
   };
   useEffect(() => { fetchRequests(); }, []);
 
-  const handleApprove = async (numericId) => {
+  const handleApprove = async (id) => {
     try {
-      const res = await fetch(`${API}/api/approval-requests/${numericId}/advance`, {
+      const res = await fetch(`${API}/api/office-requests/${id}/accept`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ actingUserId: currentUser.id }),
@@ -489,9 +541,9 @@ function ApprovalQueue({ currentUser }) {
     } catch (err) { console.error(err); }
   };
 
-  const handleReject = async (numericId, reason) => {
+  const handleReject = async (id, reason) => {
     try {
-      await fetch(`${API}/api/approval-requests/${numericId}/reject`, {
+      await fetch(`${API}/api/office-requests/${id}/reject`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ actingUserId: currentUser.id, rejectReason: reason }),
@@ -502,9 +554,11 @@ function ApprovalQueue({ currentUser }) {
     } catch (err) { console.error(err); }
   };
 
-  const pending  = requests.filter(r => r.stage === "checker" || r.stage === "authorizer");
+  const pending  = requests.filter(r => ["officer", "senior_officer", "authorizer"].includes(r.stage));
   const resolved = requests.filter(r => r.stage === "approved" || r.stage === "rejected");
   const list = activeTab === "pending" ? pending : resolved;
+
+  const rejectReasonFor = (r) => r.officerRejectReason || r.seniorOfficerRejectReason || r.deptHeadRejectReason;
 
   if (loading) return <div className="text-sm text-slate-400 p-6">Loading approval queue...</div>;
 
@@ -527,39 +581,39 @@ function ApprovalQueue({ currentUser }) {
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="min-w-0 flex-1">
                 <div className="flex items-center gap-2 mb-1">
-                  <span className="text-xs font-mono text-slate-400">{r.id}</span>
+                  <span className="text-xs font-mono text-slate-400">{r.requestCode || r.id}</span>
                   <StageLabel stage={r.stage} />
                 </div>
-                <div className="text-sm font-medium text-slate-800">{r.action} &middot; {r.target}</div>
+                <div className="text-sm font-medium text-slate-800">{r.action} &middot; {r.targetLabel}</div>
                 <div className="text-xs text-slate-500 mt-1">{r.reason}</div>
                 <div className="flex items-center gap-1.5 mt-2 text-xs text-slate-400 flex-wrap">
-                  <RoleBadge role={r.requestedByRole} />
-                  <span>requested by {r.requestedBy}</span>
+                  <RoleBadge role={r.makerRole} />
+                  <span>requested by {r.makerUsername}</span>
                   <span>&middot;</span>
                   <span>{r.created}</span>
                 </div>
-                {r.stage === "rejected" && r.rejectReason && (
+                {r.stage === "rejected" && rejectReasonFor(r) && (
                   <div className="mt-2 text-xs text-red-700 bg-red-50 rounded-lg px-3 py-2 inline-flex items-center gap-1.5">
-                    <XCircle className="w-3.5 h-3.5" /> {r.rejectReason}
+                    <XCircle className="w-3.5 h-3.5" /> {rejectReasonFor(r)}
                   </div>
                 )}
               </div>
-              <ApprovalPipeline stage={r.stage} checker={r.checker} authorizer={r.authorizer} requestedBy={r.requestedBy} />
+              <ApprovalPipeline stage={r.stage} checker={null} authorizer={null} requestedBy={r.makerUsername} />
             </div>
 
-            {(r.stage === "checker" || r.stage === "authorizer") && (
+            {["officer", "senior_officer", "authorizer"].includes(r.stage) && (
               <div className="flex items-center gap-2 mt-4 pt-4 border-t border-slate-100 flex-wrap">
-                <button onClick={() => handleApprove(r.numericId || r.id)}
+                <button onClick={() => handleApprove(r.id)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  {r.stage === "checker" ? "Approve & forward to authorizer" : "Authorize & finalize"}
+                  {r.stage === "authorizer" ? "Authorize & finalize" : "Approve & forward"}
                 </button>
                 {rejectingId === r.id ? (
                   <div className="flex items-center gap-2 flex-1">
                     <input autoFocus value={rejectReason} onChange={e => setRejectReason(e.target.value)}
                       placeholder="Reason for rejection"
                       className="flex-1 text-xs rounded-lg border border-red-200 px-2.5 py-1.5 focus:outline-none focus:ring-2 focus:ring-red-200" />
-                    <button onClick={() => handleReject(r.numericId || r.id, rejectReason)}
+                    <button onClick={() => handleReject(r.id, rejectReason)}
                       className="px-3 py-1.5 rounded-lg text-xs font-medium bg-red-600 text-white hover:bg-red-700">
                       Confirm reject
                     </button>
@@ -581,7 +635,8 @@ function ApprovalQueue({ currentUser }) {
 }
 
 // ---------------------------------------------------------------------------
-// Audit Log — fetches from API with severity filter
+// Audit Log — fetches from API with severity filter (client-side, since
+// server.js's GET /api/audit-logs does not accept ?severity/?limit params)
 // ---------------------------------------------------------------------------
 function AuditLog() {
   const [auditLog, setAuditLog] = useState([]);
@@ -590,15 +645,14 @@ function AuditLog() {
   const severities = ["All", "success", "warning", "danger", "info"];
 
   useEffect(() => {
-    const url = filter === "All"
-      ? `${API}/api/audit-logs?limit=100`
-      : `${API}/api/audit-logs?severity=${filter}&limit=100`;
     setLoading(true);
-    fetch(url)
+    fetch(`${API}/api/audit-logs`)
       .then(r => r.json())
-      .then(data => { setAuditLog(data); setLoading(false); })
+      .then(data => { setAuditLog(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(err => { console.error(err); setLoading(false); });
-  }, [filter]);
+  }, []);
+
+  const visible = filter === "All" ? auditLog : auditLog.filter(a => a.severity === filter);
 
   const sevStyle = {
     success: "bg-emerald-50 text-emerald-700",
@@ -627,13 +681,13 @@ function AuditLog() {
       </div>
       <div className="divide-y divide-slate-100 max-h-[480px] overflow-y-auto">
         {loading && <div className="p-4 text-xs text-slate-400">Loading...</div>}
-        {!loading && auditLog.map(a => (
+        {!loading && visible.map(a => (
           <div key={a.id} className="px-5 py-3 flex items-start gap-3">
             <span className={`mt-0.5 px-2 py-0.5 rounded-full text-[10px] font-medium ${sevStyle[a.severity] || sevStyle.info}`}>{a.action}</span>
             <div className="flex-1 min-w-0">
               <div className="text-sm text-slate-700">{a.detail}</div>
               <div className="text-xs text-slate-400 mt-0.5">
-                {a.user} {a.role !== "—" && `· ${a.role}`} · {a.time}
+                {a.username || 'System'} · {new Date(a.created_at).toLocaleString()}
               </div>
             </div>
           </div>
@@ -725,16 +779,20 @@ export default function AdminDashboard({ user, setUser }) {
     return () => clearInterval(interval);
   }, []);
 
-  // Load saved access matrix from backend on mount
+  // Load saved access matrix + workflow responsibility from backend on mount.
+  // FIXED: matrix was fetched from /api/access-control/matrix (404 on this
+  // server — real route is /api/permissions). Responsibility is fetched from
+  // the correct route but its array response is now converted into the
+  // stage-keyed shape this component uses in state.
   useEffect(() => {
-    fetch(`${API}/api/access-control/matrix`)
+    fetch(`${API}/api/permissions`)
       .then(r => r.json())
       .then(data => { if (data) setMatrix(data); })
       .catch(() => {});
 
     fetch(`${API}/api/access-control/responsibility`)
       .then(r => r.json())
-      .then(data => { if (data) setResponsibility(data); })
+      .then(data => { if (data) setResponsibility(arrayToResponsibilityMap(data)); })
       .catch(() => {});
   }, []);
 
