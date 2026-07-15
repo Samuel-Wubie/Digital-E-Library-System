@@ -11,6 +11,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
+  gap: 3.5rem;
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 45%, #0b1120 100%);
   font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
   padding: 2rem 1rem;
@@ -23,9 +24,25 @@
   box-sizing: inherit;
 }
 
+.login-branding {
+  flex: 1 1 420px;
+  max-width: 480px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.login-branding-image {
+  width: 100%;
+  max-width: 380px;
+  height: auto;
+  filter: drop-shadow(0 20px 40px rgba(0, 0, 0, 0.35));
+}
+
 .login-card {
   width: 100%;
   max-width: 420px;
+  flex: 0 1 420px;
   background-color: #ffffff;
   border-radius: 1rem;
   padding: 2.25rem 2rem;
@@ -38,17 +55,11 @@
 }
 
 .login-logo {
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   margin: 0 auto 1rem;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 1.25rem;
+  border-radius: 50%;
+  object-fit: contain;
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
 }
 
@@ -169,6 +180,12 @@
 .login-footer-divider {
   color: #cbd5e1;
   font-size: 0.8rem;
+}
+
+@media (max-width: 900px) {
+  .login-branding {
+    display: none;
+  }
 }
 
 @media (max-width: 480px) {

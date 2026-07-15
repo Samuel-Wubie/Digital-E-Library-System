@@ -6,6 +6,8 @@ import AdminDashboard from './components/admindashboard';
 import OfficeWorkspace from './components/OfficeWorkspace';
 import SignUp from './components/SignUp';
 import ForgotPassword from './components/ForgotPassword';
+import libraryImage from './images/liabrary.png';
+import gieLogo from './logo.png';
 
 const h = React.createElement;
 const API = "http://localhost:5000";
@@ -67,9 +69,12 @@ function LoginScreen({ onLoginSuccess, onSwitchToSignup, onSwitchToForgotPasswor
   };
 
   return h('div', { className: 'login-page' },
+    h('div', { className: 'login-branding' },
+      h('img', { src: libraryImage, alt: 'Digital Library', className: 'login-branding-image' })
+    ),
     h('div', { className: 'login-card' },
       h('div', { className: 'login-header' },
-        h('div', { className: 'login-logo' }, 'G'),
+        h('img', { src: gieLogo, alt: 'GIE Logo', className: 'login-logo' }),
         h('h1', { className: 'login-title' }, 'GIE / EGI Library System'),
         h('p', { className: 'login-subtitle' }, 'Sign in to continue')
       ),
