@@ -1,0 +1,281 @@
+/* ============================================================================
+   USERDASHBOARD.CSS
+   Extends Dashboard.css (imported alongside this file in UserDashboard.js).
+   Only new, class-badge / download-workflow / my-requests pieces live here —
+   everything else (shell, sidebar, cards, base modals) is inherited from
+   Dashboard.css so the two stay visually identical outside these additions.
+   All new classes are prefixed `ud-` to avoid collisions.
+   ============================================================================ */
+
+/* ── Tab switcher (Library / My Requests) in the main header ── */
+.ud-tab-btn {
+  background-color: #f1ece0;
+  color: #4a3f30;
+  border: 1px solid #e3dcc9;
+  border-radius: 0.6rem;
+  padding: 0.55rem 1rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  position: relative;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.ud-tab-btn:hover {
+  background-color: #e9e1cf;
+}
+
+.ud-tab-btn--active {
+  background-color: #1c1410;
+  color: #f3d9a4;
+  border-color: #c8922a;
+}
+
+.ud-notif-dot {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  margin-left: 6px;
+  border-radius: 999px;
+  background-color: #b3422f;
+  color: #ffffff;
+  font-size: 0.65rem;
+  font-weight: 700;
+}
+
+/* ── Security-class badges on book cards ── */
+.ud-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.45rem;
+}
+
+.ud-title-row h3 {
+  margin: 0;
+}
+
+.ud-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 0.15rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.ud-badge--normal {
+  background-color: #e9f7ef;
+  color: #1d6f3d;
+}
+
+.ud-badge--medium {
+  background-color: #fff6e0;
+  color: #a3661a;
+}
+
+.ud-badge--strict {
+  background-color: #fbe9e7;
+  color: #a3311f;
+}
+
+/* ── Download workflow modals (reason / pending / rejected / fee) ── */
+.ud-flow-modal {
+  max-width: 460px;
+}
+
+.ud-flow-subtitle {
+  font-size: 0.82rem;
+  color: #6b5d4a;
+  line-height: 1.5;
+  margin: -0.5rem 0 1rem 0;
+}
+
+.ud-reason-textarea {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border: 1px solid #e3dcc9;
+  border-radius: 0.6rem;
+  font-size: 0.85rem;
+  font-family: inherit;
+  resize: vertical;
+  outline: none;
+  box-sizing: border-box;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+}
+
+.ud-reason-textarea:focus {
+  border-color: #c8922a;
+  box-shadow: 0 0 0 3px rgba(200, 146, 42, 0.15);
+}
+
+.ud-flow-error {
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  background-color: #fdf2f2;
+  border: 1px solid #f8d7da;
+  border-radius: 0.55rem;
+  color: #b3422f;
+  font-size: 0.8rem;
+}
+
+.ud-rejection-box {
+  background-color: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: 0.6rem;
+  padding: 0.75rem 0.9rem;
+  font-size: 0.82rem;
+  color: #b91c1c;
+  line-height: 1.5;
+  margin-bottom: 0.5rem;
+}
+
+.ud-rejection-box--sm {
+  font-size: 0.76rem;
+  padding: 0.55rem 0.75rem;
+  margin-top: 0.5rem;
+}
+
+/* ── Stage pipeline indicator (reused in both the flow modal and the
+      My Requests list, sized differently via the --sm modifier) ── */
+.ud-stage-pipeline {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: 0.75rem 0 1rem 0;
+  flex-wrap: wrap;
+}
+
+.ud-stage-pipeline--sm {
+  margin: 0.5rem 0 0.25rem 0;
+  gap: 0.35rem;
+}
+
+.ud-pipe-step {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.ud-pipe-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+.ud-pipe-dot--pending {
+  background-color: #e3dcc9;
+}
+
+.ud-pipe-dot--current {
+  background-color: #c8922a;
+  box-shadow: 0 0 0 3px rgba(200, 146, 42, 0.2);
+}
+
+.ud-pipe-dot--done {
+  background-color: #1d6f3d;
+}
+
+.ud-pipe-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #6b5d4a;
+}
+
+/* ── My Requests panel ── */
+.ud-requests-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+}
+
+.ud-requests-section h4 {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1c1410;
+  margin: 0 0 0.75rem 0;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+
+.ud-empty-note {
+  font-size: 0.82rem;
+  color: #9a8a73;
+  margin: 0;
+}
+
+.ud-request-row {
+  background-color: #ffffff;
+  border: 1px solid #ece4d3;
+  border-radius: 0.85rem;
+  padding: 0.9rem 1.1rem;
+  margin-bottom: 0.75rem;
+  box-shadow: 0 1px 2px rgba(28, 20, 16, 0.04);
+}
+
+.ud-request-row-top {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  flex-wrap: wrap;
+  margin-bottom: 0.4rem;
+}
+
+.ud-request-code {
+  font-family: ui-monospace, 'SF Mono', monospace;
+  font-size: 0.72rem;
+  color: #9a8a73;
+}
+
+.ud-request-target {
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: #1c1410;
+}
+
+.ud-status-pill {
+  display: inline-flex;
+  padding: 0.18rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 600;
+}
+
+.ud-status-pill--officer,
+.ud-status-pill--senior_officer,
+.ud-status-pill--authorizer {
+  background-color: #fff6e0;
+  color: #a3661a;
+}
+
+.ud-status-pill--approved {
+  background-color: #e9f7ef;
+  color: #1d6f3d;
+}
+
+.ud-status-pill--rejected {
+  background-color: #fbe9e7;
+  color: #a3311f;
+}
+
+.ud-inline-pay-btn {
+  margin-top: 0.6rem;
+}
+
+@media (max-width: 540px) {
+  .ud-request-row-top {
+    align-items: flex-start;
+  }
+  .header-action-button-group {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

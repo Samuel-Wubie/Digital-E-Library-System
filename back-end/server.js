@@ -21,10 +21,6 @@ if (!fs.existsSync(uploadDir)) {
 }
 
 const storage = multer.diskStorage({
-  // FIXED: use the absolute uploadDir instead of a relative 'uploades/' path,
-  // which resolved against process.cwd() (wherever `node` was launched from)
-  // instead of always this back-end folder — causing uploads to sometimes
-  // land outside the folder express.static() actually serves.
   destination: (req, file, cb) => { cb(null, uploadDir); },
   filename: (req, file, cb) => {
     // Replaces physical spaces with dashes to guarantee trouble-free browser routing URL strings
@@ -54,6 +50,10 @@ pool.query('SELECT NOW()', (err, res) => {
 
 // ============================================================================
 // 3. FILE SERVING MIDDLEWARE
+// NOTE: this still serves every uploaded file unauthenticated. It's kept as
+// a fallback for the existing preview modal, but it is a known bypass of the
+// payment gate below (documented, not yet closed — see /api/downloads/:id/file
+// for the gated path that should become the only way to fetch paid files).
 // ============================================================================
 app.use('/uploades', (req, res, next) => {
   req.url = decodeURIComponent(req.url);
@@ -65,6 +65,12 @@ app.use('/uploades', (req, res, next) => {
 // ============================================================================
 const STAGE_ORDER = ['officer', 'senior_officer', 'authorizer'];
 
+const STAGE_ROLE_LABELS = {
+  officer: 'Officer',
+  senior_officer: 'Senior Officer',
+  authorizer: 'Department Head',
+};
+
 async function writeAuditLog(userId, action, detail, severity = 'info') {
   try {
     await pool.query(
@@ -73,6 +79,17 @@ async function writeAuditLog(userId, action, detail, severity = 'info') {
     );
   } catch (err) {
     console.error('Audit log write failed:', err.message);
+  }
+}
+
+async function writeNotification(userId, title, message, requestId = null) {
+  try {
+    await pool.query(
+      'INSERT INTO notifications (user_id, title, message, request_id) VALUES ($1, $2, $3, $4)',
+      [userId || null, title, message, requestId]
+    );
+  } catch (err) {
+    console.error('Notification write failed:', err.message);
   }
 }
 
@@ -107,6 +124,34 @@ async function resolveChainRoles() {
   }
 }
 
+// How many approval steps a download needs before payment, based on the
+// document's security class. Admin-configurable roles for each stage still
+// come from resolveChainRoles(); this only decides the LENGTH of the chain.
+function chainForClass(securityClass) {
+  if (securityClass === 'strict') return ['officer', 'senior_officer', 'authorizer'];
+  if (securityClass === 'medium') return ['officer', 'senior_officer'];
+  return []; // 'normal' — no approval chain, payment only
+}
+
+// Reads the admin-configurable per-page fee for each security class.
+async function getClassFees() {
+  const fallback = { normal: 2, medium: 5, strict: 10 };
+  try {
+    const res = await pool.query("SELECT config_data FROM system_settings WHERE setting_key = 'class_fees'");
+    if (res.rows.length === 0) return fallback;
+    const data = res.rows[0].config_data;
+    const parsed = typeof data === 'string' ? JSON.parse(data) : data;
+    return {
+      normal: Number(parsed.normal) || fallback.normal,
+      medium: Number(parsed.medium) || fallback.medium,
+      strict: Number(parsed.strict) || fallback.strict,
+    };
+  } catch (err) {
+    console.error('Failed to load class fees, using default:', err.message);
+    return fallback;
+  }
+}
+
 // ============================================================================
 // 4. DASHBOARD ANALYTICS
 // ============================================================================
@@ -118,7 +163,7 @@ app.get('/api/dashboard/counters', async (req, res) => {
       pool.query("SELECT COUNT(*) FROM users WHERE status = 'Active'"),
       pool.query("SELECT COUNT(*) FROM users"),
       pool.query("SELECT COUNT(*) FROM users WHERE created_at >= NOW() - INTERVAL '30 days'"),
-      pool.query("SELECT COUNT(*) FROM approval_requests WHERE stage IN ('checker','authorizer','officer','senior_officer')"),
+      pool.query("SELECT COUNT(*) FROM approval_requests WHERE stage IN ('officer','senior_officer','authorizer')"),
       pool.query("SELECT COUNT(*) FROM audit_logs WHERE created_at >= NOW() - INTERVAL '24 hours'"),
     ]);
     res.json({
@@ -179,7 +224,7 @@ app.get('/api/dashboard/approval-snapshot', async (req, res) => {
         u_maker.username AS "requestedBy"
       FROM approval_requests ar
       JOIN users u_maker ON ar.requested_by = u_maker.id
-      WHERE ar.stage IN ('checker','authorizer','officer','senior_officer')
+      WHERE ar.stage IN ('officer','senior_officer','authorizer')
       ORDER BY ar.created_at DESC
       LIMIT 3
     `);
@@ -425,37 +470,27 @@ app.put('/api/users/:id/status', async (req, res) => {
 // 7. BOOKS / RECORDS
 // ============================================================================
 
-// --- SEARCH (FIXED: now applies title/author/department/location/year filters
-// from the query string instead of always returning every row) ---
 app.get('/api/books/search', async (req, res) => {
-  const { title, author, department, location, year } = req.query;
+  const {
+    title, author, department, location, year, yearFrom, yearTo,
+    category, reportTopic, mapType, mapFormat, scale
+  } = req.query;
   try {
     let query = 'SELECT * FROM books WHERE 1=1';
     const values = [];
-
-    if (title) {
-      values.push(`%${title}%`);
-      query += ` AND title ILIKE $${values.length}`;
-    }
-    if (author) {
-      values.push(`%${author}%`);
-      query += ` AND author ILIKE $${values.length}`;
-    }
-    if (department) {
-      values.push(department);
-      query += ` AND department = $${values.length}`;
-    }
-    if (location) {
-      values.push(location);
-      query += ` AND location = $${values.length}`;
-    }
-    if (year) {
-      values.push(parseInt(year, 10));
-      query += ` AND published_year = $${values.length}`;
-    }
-
+    if (title) { values.push(`%${title}%`); query += ` AND title ILIKE $${values.length}`; }
+    if (author) { values.push(`%${author}%`); query += ` AND author ILIKE $${values.length}`; }
+    if (department) { values.push(department); query += ` AND department = $${values.length}`; }
+    if (location) { values.push(location); query += ` AND location = $${values.length}`; }
+    if (category) { values.push(category); query += ` AND category = $${values.length}`; }
+    if (reportTopic) { values.push(reportTopic); query += ` AND report_topic = $${values.length}`; }
+    if (mapType) { values.push(mapType); query += ` AND map_type = $${values.length}`; }
+    if (mapFormat) { values.push(mapFormat); query += ` AND map_format = $${values.length}`; }
+    if (scale) { values.push(scale); query += ` AND scale = $${values.length}`; }
+    if (yearFrom) { values.push(parseInt(yearFrom, 10)); query += ` AND published_year >= $${values.length}`; }
+    if (yearTo) { values.push(parseInt(yearTo, 10)); query += ` AND published_year <= $${values.length}`; }
+    if (year && !yearFrom && !yearTo) { values.push(year); query += ` AND published_year = $${values.length}`; }
     query += ' ORDER BY id ASC';
-
     const result = await pool.query(query, values);
     res.json(result.rows);
   } catch (err) {
@@ -465,16 +500,25 @@ app.get('/api/books/search', async (req, res) => {
 });
 
 app.post('/api/books', upload.single('pdfFile'), async (req, res) => {
-  const { title, author, department, location, published_year, page_count, uploadedBy } = req.body;
+  const {
+    title, author, department, location, published_year, page_count, uploadedBy, security_class,
+    category, reportTopic, mapType, mapFormat, scale
+  } = req.body;
   const file_path = req.file ? req.file.filename : null;
+  const secClass = ['normal', 'medium', 'strict'].includes(security_class) ? security_class : 'normal';
   try {
     const result = await pool.query(
-      `INSERT INTO books (title, author, department, location, published_year, page_count, file_path, uploaded_by)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING *`,
-      [title, author, department, location, parseInt(published_year) || null, parseInt(page_count) || 12, file_path, uploadedBy ? parseInt(uploadedBy) : null]
+      `INSERT INTO books (title, author, department, location, published_year, page_count, file_path, uploaded_by, security_class,
+                           category, report_topic, map_type, map_format, scale)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+      [
+        title, author, department, location, parseInt(published_year) || null, parseInt(page_count) || 12,
+        file_path, uploadedBy ? parseInt(uploadedBy) : null, secClass,
+        category || null, reportTopic || null, mapType || null, mapFormat || null, scale || null
+      ]
     );
     const newBook = result.rows[0];
-    await writeAuditLog(uploadedBy ? parseInt(uploadedBy) : null, 'Created', `Added record: ${newBook.title}`, 'info');
+    await writeAuditLog(uploadedBy ? parseInt(uploadedBy) : null, 'Created', `Added record: ${newBook.title} (${secClass})`, 'info');
     res.json(newBook);
   } catch (err) {
     console.error(err.message);
@@ -484,18 +528,32 @@ app.post('/api/books', upload.single('pdfFile'), async (req, res) => {
 
 app.put('/api/books/:id', upload.single('pdfFile'), async (req, res) => {
   const { id } = req.params;
-  const { title, author, department, location, published_year, page_count, editedBy } = req.body;
+  const {
+    title, author, department, location, published_year, page_count, editedBy, security_class,
+    category, reportTopic, mapType, mapFormat, scale
+  } = req.body;
+  const secClass = ['normal', 'medium', 'strict'].includes(security_class) ? security_class : 'normal';
   try {
     let result;
     if (req.file) {
       result = await pool.query(
-        `UPDATE books SET title=$1, author=$2, department=$3, location=$4, published_year=$5, page_count=$6, file_path=$7, updated_at=NOW() WHERE id=$8 RETURNING *`,
-        [title, author, department, location, parseInt(published_year) || null, parseInt(page_count) || 12, req.file.filename, id]
+        `UPDATE books SET title=$1, author=$2, department=$3, location=$4, published_year=$5, page_count=$6,
+                file_path=$7, security_class=$8, category=$9, report_topic=$10, map_type=$11, map_format=$12, scale=$13, updated_at=NOW()
+         WHERE id=$14 RETURNING *`,
+        [
+          title, author, department, location, parseInt(published_year) || null, parseInt(page_count) || 12,
+          req.file.filename, secClass, category || null, reportTopic || null, mapType || null, mapFormat || null, scale || null, id
+        ]
       );
     } else {
       result = await pool.query(
-        `UPDATE books SET title=$1, author=$2, department=$3, location=$4, published_year=$5, page_count=$6, updated_at=NOW() WHERE id=$7 RETURNING *`,
-        [title, author, department, location, parseInt(published_year) || null, parseInt(page_count) || 12, id]
+        `UPDATE books SET title=$1, author=$2, department=$3, location=$4, published_year=$5, page_count=$6,
+                security_class=$7, category=$8, report_topic=$9, map_type=$10, map_format=$11, scale=$12, updated_at=NOW()
+         WHERE id=$13 RETURNING *`,
+        [
+          title, author, department, location, parseInt(published_year) || null, parseInt(page_count) || 12,
+          secClass, category || null, reportTopic || null, mapType || null, mapFormat || null, scale || null, id
+        ]
       );
     }
     if (result.rows.length === 0) return res.status(404).json({ message: "Record not found" });
@@ -521,6 +579,9 @@ app.delete('/api/books/:id', async (req, res) => {
   }
 });
 
+// Legacy unconditional download counter — kept for anything still calling it
+// directly, but the new flow should go through /api/downloads/* below so the
+// security-class approval + payment gate is actually enforced.
 app.post('/api/books/:id/download', async (req, res) => {
   const { id } = req.params;
   const { userId } = req.body;
@@ -558,7 +619,7 @@ app.get('/api/audit-logs', async (req, res) => {
 });
 
 // ============================================================================
-// 9. REFACTORED: DYNAMIC SECURITY & ACCESS CONFIGURATION MATRIX ENDPOINTS
+// 9. DYNAMIC SECURITY & ACCESS CONFIGURATION MATRIX ENDPOINTS
 // ============================================================================
 
 // --- WORKFLOW STAGE RESPONSIBILITY DEFINITIONS ---
@@ -625,8 +686,48 @@ app.put('/api/permissions', async (req, res) => {
   }
 });
 
+// --- PER-PAGE FEES FOR EACH DOCUMENT SECURITY CLASS ---
+app.get('/api/settings/class-fees', async (req, res) => {
+  try {
+    const fees = await getClassFees();
+    res.json(fees);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+app.put('/api/settings/class-fees', async (req, res) => {
+  const { fees, changedBy } = req.body;
+  if (!fees || typeof fees !== 'object') {
+    return res.status(400).json({ message: "fees object is required" });
+  }
+  const normalized = {
+    normal: Number(fees.normal) || 0,
+    medium: Number(fees.medium) || 0,
+    strict: Number(fees.strict) || 0,
+  };
+  try {
+    await pool.query(
+      `INSERT INTO system_settings (setting_key, config_data, updated_at)
+       VALUES ('class_fees', $1, NOW())
+       ON CONFLICT (setting_key) DO UPDATE SET config_data = $1, updated_at = NOW()`,
+      [JSON.stringify(normalized)]
+    );
+    await writeAuditLog(
+      changedBy, 'Class Fees Updated',
+      `Per-page fees set — Normal: ${normalized.normal}, Medium: ${normalized.medium}, Strict: ${normalized.strict}`,
+      'warning'
+    );
+    res.json({ success: true, fees: normalized });
+  } catch (err) {
+    console.error("Failed to persist class fees:", err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
 // ============================================================================
-// 10. DYNAMIC CHANNELS WORKFLOW ENGINE (3-Step Chain with Mapping Matrix)
+// 10. DYNAMIC CHANNELS WORKFLOW ENGINE (variable-length chain with mapping matrix)
 // ============================================================================
 
 // --- DETECT ACTIVE WORKFLOW STAGE POSITION BASED ON MATRIX SETTINGS ---
@@ -643,7 +744,7 @@ app.get('/api/office-requests/my-stage', async (req, res) => {
   }
 });
 
-// --- SUBMIT COMPONENT CHANGE WITH DYNAMIC INITIAL STAGE ROUTING ---
+// --- SUBMIT PERMISSION CHANGE (add/edit/delete a record) — always the full 3-step chain ---
 app.post('/api/office-requests', upload.single('pdfFile'), async (req, res) => {
   const { makerId, requestType, requestedPermission, targetLabel, targetBookId, reason, metaContext } = req.body;
 
@@ -668,11 +769,11 @@ app.post('/api/office-requests', upload.single('pdfFile'), async (req, res) => {
     if (req.file) contextPayload.file_path = req.file.filename;
 
     const requestCode = await nextRequestCode();
-    const action = requestType === 'download' ? 'Download' : `Permission: ${requestedPermission}`;
+    const action = `Permission: ${requestedPermission}`;
 
-    const chainRoles = await resolveChainRoles(); 
+    const chainRoles = await resolveChainRoles();
     const makerRoleIndex = chainRoles.indexOf(maker.role);
-    
+
     let initialStage;
     if (makerRoleIndex !== -1 && (makerRoleIndex + 1) < STAGE_ORDER.length) {
       initialStage = STAGE_ORDER[makerRoleIndex + 1];
@@ -708,14 +809,14 @@ app.post('/api/office-requests', upload.single('pdfFile'), async (req, res) => {
   }
 });
 
-// --- OFFICE LIST QUEUES ---
+// --- OFFICE LIST QUEUES (used by both permission and download requests) ---
 app.get('/api/office-requests', async (req, res) => {
-  const { stage, makerId, reviewerRole } = req.query;
+  const { stage, makerId, reviewerRole, requestType } = req.query;
   try {
     const chainRoles = await resolveChainRoles();
     const settingsMap = {
-      maker: chainRoles[0],
-      checker: chainRoles[1],
+      officer: chainRoles[0],
+      senior_officer: chainRoles[1],
       authorizer: chainRoles[2]
     };
 
@@ -731,7 +832,11 @@ app.get('/api/office-requests', async (req, res) => {
     let query = `
       SELECT
         ar.id, ar.request_code AS "requestCode", ar.action, ar.target_label AS "targetLabel",
+        ar.target_book_id AS "targetBookId",
         ar.request_type AS "requestType", ar.requested_permission AS "requestedPermission", ar.reason, ar.stage,
+        ar.security_class AS "securityClass", ar.required_stages AS "requiredStages",
+        ar.fee_per_page AS "feePerPage", ar.page_count_snapshot AS "pageCount", ar.total_fee AS "totalFee",
+        ar.payment_status AS "paymentStatus",
         ar.maker_full_name AS "makerFullName", ar.maker_username AS "makerUsername", ar.requested_by AS "makerId", maker.role AS "makerRole",
         ar.officer_id AS "officerId", ar.checker_id AS "seniorOfficerId", ar.authorizer_id AS "deptHeadId",
         ar.meta_context AS "metaContext",
@@ -750,6 +855,10 @@ app.get('/api/office-requests', async (req, res) => {
       values.push(makerId);
       query += ` AND ar.requested_by = $${values.length}`;
     }
+    if (requestType) {
+      values.push(requestType);
+      query += ` AND ar.request_type = $${values.length}`;
+    }
     query += ` ORDER BY ar.created_at DESC`;
 
     const result = await pool.query(query, values);
@@ -767,7 +876,8 @@ app.get('/api/office-requests', async (req, res) => {
   }
 });
 
-// --- OFFICE STEP ACCEPT / VERIFY ---
+// --- OFFICE STEP ACCEPT / VERIFY (handles both fixed 3-step permission
+// --- requests and the variable-length download chain) ---
 app.put('/api/office-requests/:id/accept', async (req, res) => {
   const { id } = req.params;
   const { actingUserId } = req.body;
@@ -778,77 +888,105 @@ app.put('/api/office-requests/:id/accept', async (req, res) => {
     if (current.rows.length === 0) return res.status(404).json({ message: "Request not found" });
     const reqRow = current.rows[0];
 
+    const chain = (reqRow.request_type === 'download' && reqRow.required_stages && reqRow.required_stages.length > 0)
+      ? reqRow.required_stages
+      : STAGE_ORDER;
+
     const actingUserResult = await pool.query('SELECT role FROM users WHERE id = $1', [actingUserId]);
     if (actingUserResult.rows.length === 0) return res.status(404).json({ message: "Acting user not found" });
     const actingUserRole = actingUserResult.rows[0].role;
 
-    if (!STAGE_ORDER.includes(reqRow.stage)) {
+    if (!chain.includes(reqRow.stage)) {
       return res.status(409).json({ message: `Already in terminal or unrelated stage: ${reqRow.stage}` });
     }
     if (reqRow.requested_by === parseInt(actingUserId)) {
       return res.status(403).json({ message: "Segregation of duties rule violation: Maker cannot verify their own request" });
     }
 
-    const chainRoles = await resolveChainRoles();
-    const expectedRoleForStage = chainRoles[STAGE_ORDER.indexOf(reqRow.stage)];
+    const chainRoles = await resolveChainRoles(); // [officerRole, seniorOfficerRole, deptHeadRole]
+    const stageToRole = { officer: chainRoles[0], senior_officer: chainRoles[1], authorizer: chainRoles[2] };
+    const expectedRoleForStage = stageToRole[reqRow.stage];
     if (actingUserRole !== expectedRoleForStage) {
       return res.status(403).json({ message: `Role clearance matrix mismatch. Expected: ${expectedRoleForStage}` });
     }
 
-    let nextStage;
-    let updateQuery;
+    const currentIdx = chain.indexOf(reqRow.stage);
+    const isFinalStep = currentIdx === chain.length - 1;
+    const nextStage = isFinalStep ? 'approved' : chain[currentIdx + 1];
 
-    if (reqRow.stage === 'officer') {
-      nextStage = 'senior_officer';
-      updateQuery = `UPDATE approval_requests SET stage = $1, officer_id = $2, updated_at = NOW() WHERE id = $3 RETURNING *`;
-    } else if (reqRow.stage === 'senior_officer') {
-      nextStage = 'authorizer';
-      updateQuery = `UPDATE approval_requests SET stage = $1, checker_id = $2, updated_at = NOW() WHERE id = $3 RETURNING *`;
-    } else if (reqRow.stage === 'authorizer') {
-      nextStage = 'approved';
-      updateQuery = `UPDATE approval_requests SET stage = $1, authorizer_id = $2, updated_at = NOW() WHERE id = $3 RETURNING *`;
-    }
+    let idColumn;
+    if (reqRow.stage === 'officer') idColumn = 'officer_id';
+    else if (reqRow.stage === 'senior_officer') idColumn = 'checker_id';
+    else idColumn = 'authorizer_id';
 
-    const result = await pool.query(updateQuery, [nextStage, actingUserId, id]);
-    // Uses the dynamically resolved role for this stage (from resolveChainRoles/
-    // responsibility_map) instead of a hardcoded label, so the audit log reflects
-    // whatever role an admin actually assigned to this stage.
-    const roleLabel = expectedRoleForStage;
-
+    const result = await pool.query(
+      `UPDATE approval_requests SET stage = $1, ${idColumn} = $2, updated_at = NOW() WHERE id = $3 RETURNING *`,
+      [nextStage, actingUserId, id]
+    );
+    const roleLabel = STAGE_ROLE_LABELS[reqRow.stage];
     await writeAuditLog(actingUserId, `Office Chain: ${roleLabel} Verified`, `Request ${reqRow.request_code} advanced from '${reqRow.stage}' to '${nextStage}'`, 'info');
 
     if (nextStage === 'approved') {
-      const data = typeof reqRow.meta_context === 'string' ? JSON.parse(reqRow.meta_context) : reqRow.meta_context;
-
       if (reqRow.request_type === 'download') {
-        await pool.query('UPDATE books SET download_count = download_count + 1 WHERE id = $1', [reqRow.target_book_id]);
-      }
-      else if (reqRow.request_type === 'permission') {
+        // Approval does NOT unlock the file — payment is still required.
+        await writeNotification(
+          reqRow.requested_by,
+          'Download request approved',
+          `${reqRow.request_code} — "${reqRow.target_label}" was approved. Pay ${reqRow.total_fee} to download it.`,
+          reqRow.id
+        );
+        await writeAuditLog(reqRow.requested_by, 'Approved — Awaiting Payment', `${reqRow.request_code} approved, total fee: ${reqRow.total_fee}`, 'success');
+      } else if (reqRow.request_type === 'permission') {
+        const data = typeof reqRow.meta_context === 'string' ? JSON.parse(reqRow.meta_context) : reqRow.meta_context;
+
         if (reqRow.requested_permission === 'add') {
           await pool.query(
-            `INSERT INTO books (title, author, department, location, published_year, page_count, file_path, uploaded_by)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
-            [data.title, data.author, data.department, data.location, parseInt(data.published_year) || null, parseInt(data.page_count) || 12, data.file_path || null, reqRow.requested_by]
+            `INSERT INTO books (title, author, department, location, published_year, page_count, file_path, uploaded_by, security_class,
+                                 category, report_topic, map_type, map_format, scale)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+            [
+              data.title, data.author, data.department, data.location, parseInt(data.published_year) || null, parseInt(data.page_count) || 12,
+              data.file_path || null, reqRow.requested_by, data.security_class || 'normal',
+              data.category || null, data.reportTopic || null, data.mapType || null, data.mapFormat || null, data.scale || null
+            ]
           );
-        }
-        else if (reqRow.requested_permission === 'edit') {
+        } else if (reqRow.requested_permission === 'edit') {
           if (data.file_path) {
             await pool.query(
-              `UPDATE books SET title=$1, author=$2, department=$3, location=$4, published_year=$5, page_count=$6, file_path=$7, updated_at=NOW() WHERE id=$8`,
-              [data.title, data.author, data.department, data.location, parseInt(data.published_year) || null, parseInt(data.page_count) || 12, data.file_path, reqRow.target_book_id]
+              `UPDATE books SET title=$1, author=$2, department=$3, location=$4, published_year=$5, page_count=$6, file_path=$7, security_class=$8,
+                      category=$9, report_topic=$10, map_type=$11, map_format=$12, scale=$13, updated_at=NOW() WHERE id=$14`,
+              [
+                data.title, data.author, data.department, data.location, parseInt(data.published_year) || null, parseInt(data.page_count) || 12,
+                data.file_path, data.security_class || 'normal',
+                data.category || null, data.reportTopic || null, data.mapType || null, data.mapFormat || null, data.scale || null,
+                reqRow.target_book_id
+              ]
             );
           } else {
             await pool.query(
-              `UPDATE books SET title=$1, author=$2, department=$3, location=$4, published_year=$5, page_count=$6, updated_at=NOW() WHERE id=$7`,
-              [data.title, data.author, data.department, data.location, parseInt(data.published_year) || null, parseInt(data.page_count) || 12, reqRow.target_book_id]
+              `UPDATE books SET title=$1, author=$2, department=$3, location=$4, published_year=$5, page_count=$6, security_class=$7,
+                      category=$8, report_topic=$9, map_type=$10, map_format=$11, scale=$12, updated_at=NOW() WHERE id=$13`,
+              [
+                data.title, data.author, data.department, data.location, parseInt(data.published_year) || null, parseInt(data.page_count) || 12,
+                data.security_class || 'normal',
+                data.category || null, data.reportTopic || null, data.mapType || null, data.mapFormat || null, data.scale || null,
+                reqRow.target_book_id
+              ]
             );
           }
-        }
-        else if (reqRow.requested_permission === 'delete') {
+        } else if (reqRow.requested_permission === 'delete') {
           await pool.query('DELETE FROM books WHERE id = $1', [reqRow.target_book_id]);
         }
         await writeAuditLog(reqRow.requested_by, 'Execution Complete', `Staging modification metrics updated successfully for action: ${reqRow.requested_permission}`, 'success');
+        await writeNotification(reqRow.requested_by, 'Request approved', `${reqRow.request_code} — "${reqRow.target_label}" was approved and applied.`, reqRow.id);
       }
+    } else {
+      await writeNotification(
+        reqRow.requested_by,
+        'Request forwarded',
+        `${reqRow.request_code} moved to the next reviewer (${STAGE_ROLE_LABELS[nextStage] || nextStage}).`,
+        reqRow.id
+      );
     }
 
     return res.json(result.rows[0]);
@@ -863,18 +1001,25 @@ app.put('/api/office-requests/:id/reject', async (req, res) => {
   const { id } = req.params;
   const { actingUserId, rejectReason } = req.body;
   if (!actingUserId) return res.status(400).json({ message: "actingUserId is required" });
+  if (!rejectReason || !rejectReason.trim()) {
+    return res.status(400).json({ message: "A reason is required to reject a request" });
+  }
 
   try {
     const current = await pool.query('SELECT * FROM approval_requests WHERE id = $1', [id]);
     if (current.rows.length === 0) return res.status(404).json({ message: "Request not found" });
     const reqRow = current.rows[0];
 
-    if (!STAGE_ORDER.includes(reqRow.stage)) {
+    const chain = (reqRow.request_type === 'download' && reqRow.required_stages && reqRow.required_stages.length > 0)
+      ? reqRow.required_stages
+      : STAGE_ORDER;
+
+    if (!chain.includes(reqRow.stage)) {
       return res.status(409).json({ message: `Cannot reject request from current stage: ${reqRow.stage}` });
     }
 
     let updateQuery;
-    const fallbackReason = rejectReason || 'No reason provided';
+    const cleanReason = rejectReason.trim();
 
     if (reqRow.stage === 'officer') {
       updateQuery = `UPDATE approval_requests SET stage = 'rejected', officer_id = $1, officer_reject_reason = $2, updated_at = NOW() WHERE id = $3 RETURNING *`;
@@ -884,8 +1029,9 @@ app.put('/api/office-requests/:id/reject', async (req, res) => {
       updateQuery = `UPDATE approval_requests SET stage = 'rejected', authorizer_id = $1, dept_head_reject_reason = $2, updated_at = NOW() WHERE id = $3 RETURNING *`;
     }
 
-    const result = await pool.query(updateQuery, [actingUserId, fallbackReason, id]);
-    await writeAuditLog(actingUserId, 'Office Request Rejected', `Request ${reqRow.request_code} rejected at stage '${reqRow.stage}'`, 'danger');
+    const result = await pool.query(updateQuery, [actingUserId, cleanReason, id]);
+    await writeAuditLog(actingUserId, 'Office Request Rejected', `Request ${reqRow.request_code} rejected at stage '${reqRow.stage}': ${cleanReason}`, 'danger');
+    await writeNotification(reqRow.requested_by, 'Request rejected', `${reqRow.request_code} — "${reqRow.target_label}" was rejected: ${cleanReason}`, reqRow.id);
 
     return res.json(result.rows[0]);
   } catch (err) {
@@ -895,7 +1041,226 @@ app.put('/api/office-requests/:id/reject', async (req, res) => {
 });
 
 // ============================================================================
-// 11. SERVER STARTUP
+// 11. SECURITY-CLASSED DOWNLOAD + PAYMENT PIPELINE
+// ============================================================================
+
+// --- QUOTE: what will this download cost, and does it need approval first? ---
+app.post('/api/downloads/initiate', async (req, res) => {
+  const { bookId } = req.body;
+  if (!bookId) return res.status(400).json({ message: "bookId is required" });
+  try {
+    const bookResult = await pool.query('SELECT id, title, page_count, security_class FROM books WHERE id = $1', [bookId]);
+    if (bookResult.rows.length === 0) return res.status(404).json({ message: "Book not found" });
+    const book = bookResult.rows[0];
+
+    const fees = await getClassFees();
+    const securityClass = book.security_class || 'normal';
+    const feePerPage = fees[securityClass];
+    const pageCount = book.page_count || 12;
+    const totalFee = +(feePerPage * pageCount).toFixed(2);
+    const approvalChain = chainForClass(securityClass);
+
+    res.json({
+      bookId: book.id,
+      title: book.title,
+      securityClass,
+      pageCount,
+      feePerPage,
+      totalFee,
+      requiresApproval: approvalChain.length > 0,
+      approvalChain
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// --- SUBMIT A DOWNLOAD REQUEST (normal docs land straight on 'approved';
+//   --- medium/strict start their approval chain) ---
+app.post('/api/downloads/request', async (req, res) => {
+  const { bookId, userId, reason } = req.body;
+  if (!bookId || !userId) return res.status(400).json({ message: "bookId and userId are required" });
+
+  try {
+    const bookResult = await pool.query('SELECT * FROM books WHERE id = $1', [bookId]);
+    if (bookResult.rows.length === 0) return res.status(404).json({ message: "Book not found" });
+    const book = bookResult.rows[0];
+
+    const makerResult = await pool.query('SELECT id, full_name, username, role FROM users WHERE id = $1', [userId]);
+    if (makerResult.rows.length === 0) return res.status(404).json({ message: "User not found" });
+    const maker = makerResult.rows[0];
+
+    const securityClass = book.security_class || 'normal';
+    const chain = chainForClass(securityClass);
+
+    if (chain.length > 0 && (!reason || !reason.trim())) {
+      return res.status(400).json({ message: "A reason is required for medium and strict documents" });
+    }
+
+    const fees = await getClassFees();
+    const feePerPage = fees[securityClass];
+    const pageCount = book.page_count || 12;
+    const totalFee = +(feePerPage * pageCount).toFixed(2);
+
+    const requestCode = await nextRequestCode();
+    const initialStage = chain.length > 0 ? chain[0] : 'approved';
+
+    const result = await pool.query(
+      `INSERT INTO approval_requests
+         (request_code, action, target_label, target_book_id, reason, stage, requested_by, request_type,
+          maker_full_name, maker_username, security_class, required_stages, fee_per_page, page_count_snapshot,
+          total_fee, payment_status, meta_context)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'download',$8,$9,$10,$11,$12,$13,$14,'unpaid',$15) RETURNING *`,
+      [
+        requestCode, 'Download', `Download Document: ${book.title}`, book.id,
+        reason && reason.trim() ? reason.trim() : 'Standard document — no authorization required',
+        initialStage, userId, maker.full_name, maker.username, securityClass, chain,
+        feePerPage, pageCount, totalFee,
+        JSON.stringify({ file_path: book.file_path })
+      ]
+    );
+
+    if (chain.length === 0) {
+      await writeAuditLog(userId, 'Download Requested', `${requestCode} — ${book.title} (normal, no approval needed)`, 'info');
+    } else {
+      await writeAuditLog(userId, 'Download Requested', `${requestCode} — ${book.title} routed to [${initialStage}] (${securityClass})`, 'warning');
+    }
+
+    res.json(result.rows[0]);
+  } catch (err) {
+    console.error("Download request pipeline error:", err.message);
+    res.status(500).json({ message: "Server Error", error: err.message });
+  }
+});
+
+// --- PAY FOR AN APPROVED DOWNLOAD ---
+app.post('/api/payments/checkout', async (req, res) => {
+  const { requestId, userId, gateway } = req.body;
+  if (!requestId || !userId) return res.status(400).json({ message: "requestId and userId are required" });
+
+  const client = await pool.connect();
+  try {
+    const current = await client.query('SELECT * FROM approval_requests WHERE id = $1', [requestId]);
+    if (current.rows.length === 0) {
+      client.release();
+      return res.status(404).json({ message: "Request not found" });
+    }
+    const reqRow = current.rows[0];
+
+    if (reqRow.requested_by !== parseInt(userId)) {
+      client.release();
+      return res.status(403).json({ message: "Only the requester can pay for this download" });
+    }
+    if (reqRow.stage !== 'approved') {
+      client.release();
+      return res.status(409).json({ message: "This request has not been approved yet" });
+    }
+    if (reqRow.payment_status === 'paid') {
+      client.release();
+      return res.status(409).json({ message: "This download has already been paid for" });
+    }
+
+    await client.query('BEGIN');
+    await client.query(
+      `INSERT INTO payments (request_id, book_id, user_id, page_count, fee_per_page, total_amount, gateway, status)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'completed')`,
+      [reqRow.id, reqRow.target_book_id, userId, reqRow.page_count_snapshot, reqRow.fee_per_page, reqRow.total_fee, gateway || 'unspecified']
+    );
+    const updated = await client.query(
+      `UPDATE approval_requests SET payment_status = 'paid', updated_at = NOW() WHERE id = $1 RETURNING *`,
+      [reqRow.id]
+    );
+    await client.query('COMMIT');
+
+    await writeAuditLog(
+      userId, 'Payment Completed',
+      `${reqRow.request_code} — paid ${reqRow.total_fee} (${reqRow.page_count_snapshot} pages @ ${reqRow.fee_per_page}/page)`,
+      'success'
+    );
+
+    res.json({
+      success: true,
+      request: updated.rows[0],
+      downloadUrl: `/api/downloads/${reqRow.id}/file?userId=${userId}`
+    });
+  } catch (err) {
+    await client.query('ROLLBACK').catch(() => {});
+    console.error("Payment checkout failed:", err.message);
+    res.status(500).json({ message: "Payment failed", error: err.message });
+  } finally {
+    client.release();
+  }
+});
+
+// --- GATED FILE DOWNLOAD: only the maker, only after approval + payment ---
+app.get('/api/downloads/:requestId/file', async (req, res) => {
+  const { requestId } = req.params;
+  const { userId } = req.query;
+
+  try {
+    const current = await pool.query('SELECT * FROM approval_requests WHERE id = $1', [requestId]);
+    if (current.rows.length === 0) return res.status(404).json({ message: "Request not found" });
+    const reqRow = current.rows[0];
+
+    if (String(reqRow.requested_by) !== String(userId)) {
+      return res.status(403).json({ message: "This download does not belong to you" });
+    }
+    if (reqRow.stage !== 'approved') {
+      return res.status(403).json({ message: "This request has not been approved" });
+    }
+    if (reqRow.payment_status !== 'paid') {
+      return res.status(402).json({ message: "Payment required before downloading" });
+    }
+
+    const data = typeof reqRow.meta_context === 'string' ? JSON.parse(reqRow.meta_context) : reqRow.meta_context;
+    const filePath = data && data.file_path;
+    if (!filePath) return res.status(404).json({ message: "No file associated with this request" });
+
+    const absolutePath = path.join(uploadDir, filePath);
+    if (!fs.existsSync(absolutePath)) return res.status(404).json({ message: "File no longer exists on disk" });
+
+    await pool.query('UPDATE books SET download_count = download_count + 1 WHERE id = $1', [reqRow.target_book_id]);
+    await writeAuditLog(userId, 'Downloaded', `${reqRow.request_code} — file delivered`, 'info');
+
+    res.download(absolutePath);
+  } catch (err) {
+    console.error("Secured download failed:", err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// ============================================================================
+// 12. NOTIFICATIONS
+// ============================================================================
+app.get('/api/notifications', async (req, res) => {
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ message: "userId is required" });
+  try {
+    const result = await pool.query(
+      'SELECT * FROM notifications WHERE user_id = $1 ORDER BY created_at DESC LIMIT 50',
+      [userId]
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+app.put('/api/notifications/:id/read', async (req, res) => {
+  const { id } = req.params;
+  try {
+    await pool.query('UPDATE notifications SET is_read = TRUE WHERE id = $1', [id]);
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// ============================================================================
+// 13. SERVER STARTUP
 // ============================================================================
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {

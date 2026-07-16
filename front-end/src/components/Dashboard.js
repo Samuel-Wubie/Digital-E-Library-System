@@ -1,97 +1,250 @@
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import './Dashboard.css';
-import FilterDropdown from './FilterDropdown';
+import './LibraryNav.css';
 import { usePermissions } from './UsePermissions';
 
-const Dashboard = ({ user, setUser }) => {
-  // --- STATES ---
+const API = 'http://localhost:5000';
+const CURRENT_YEAR = new Date().getFullYear();
+const EARLIEST_YEAR = 1950; // adjust if older records exist in the archive
+
+// ============================================================================
+// LIBRARY CATEGORY STRUCTURE
+// ============================================================================
+
+// Technical Reports — numbered topics, browsed in ascending order.
+// Full index taken from Library_.pdf. Append more {number,label} objects
+// here if new topics get added later — the grid always sorts ascending.
+const TECHNICAL_REPORT_TOPICS = [
+  { number: 1,   label: 'Abrasives (Pumice)' },
+  { number: 2,   label: 'Kaolin Belesa Feldspar, Quartz' },
+  { number: 5,   label: 'Asbestos' },
+  { number: 6,   label: 'Baryte' },
+  { number: 7,   label: 'Beryl' },
+  { number: 8,   label: 'Black Sands' },
+  { number: 11,  label: 'Building Material (Pumice)' },
+  { number: 14,  label: 'Calcium' },
+  { number: 15,  label: 'Carbon Dioxide' },
+  { number: 16,  label: 'Cement Raw Material' },
+  { number: 18,  label: 'Ceramics' },
+  { number: 19,  label: 'Chromite' },
+  { number: 20,  label: 'Bentonite & Clay (Kyanite)' },
+  { number: 21,  label: 'Coal, Lignite' },
+  { number: 24,  label: 'Copper' },
+  { number: 27,  label: 'Diatomite' },
+  { number: 29,  label: 'Evaporite Minerals' },
+  { number: 30,  label: 'Calcitic, Industrial Deposit' },
+  { number: 38,  label: 'Gemstones' },
+  { number: 40,  label: 'Sheet Glass' },
+  { number: 41,  label: 'Gold' },
+  { number: 42,  label: 'Graphite and Talc' },
+  { number: 43,  label: 'Gypsum, Alluvial' },
+  { number: 47,  label: 'Sysertskite' },
+  { number: 48,  label: 'Iron Report' },
+  { number: 49,  label: 'Lead, Zinc' },
+  { number: 50,  label: 'Building Stone, Lime & Limestone Marble' },
+  { number: 54,  label: 'Manganese' },
+  { number: 57,  label: 'Mica' },
+  { number: 58,  label: 'Mineral Water' },
+  { number: 63,  label: 'Nickel' },
+  { number: 65,  label: 'Olivine' },
+  { number: 68,  label: 'Petroleum Oil & Gas' },
+  { number: 69,  label: 'Ilmenite, Apatite, Phosphate & Magnetite' },
+  { number: 70,  label: 'Pigments' },
+  { number: 71,  label: 'Platinum' },
+  { number: 73,  label: 'Potash' },
+  { number: 76,  label: 'Quartzite' },
+  { number: 83,  label: 'Salt' },
+  { number: 90,  label: 'Silica, Silicon Dolomite' },
+  { number: 92,  label: 'Sodium, Soda' },
+  { number: 94,  label: 'Sulphur' },
+  { number: 97,  label: 'Tantalum' },
+  { number: 102, label: 'Tin' },
+  { number: 103, label: 'Titanium' },
+  { number: 104, label: 'Travertine' },
+  { number: 105, label: 'Tungsten' },
+  { number: 106, label: 'Uranium' },
+  { number: 107, label: 'Vanadium' },
+  { number: 108, label: 'Water' },
+  { number: 111, label: 'Zircon' },
+  { number: 780, label: 'Bibliography' },
+  { number: 790, label: 'Cartography Maps' },
+  { number: 800, label: 'Chemistry' },
+  { number: 810, label: 'Geochemistry' },
+  { number: 820, label: 'Geochronology' },
+  { number: 821, label: 'Geology' },
+  { number: 822, label: 'Economic Geology' },
+  { number: 823, label: 'Engineering' },
+  { number: 824, label: 'Structural Geology' },
+  { number: 830, label: 'Geomorphology' },
+  { number: 840, label: 'Geophysics' },
+  { number: 860, label: 'Geothermal' },
+  { number: 875, label: 'Glaciation' },
+  { number: 880, label: 'Hydrogeology' },
+  { number: 900, label: 'Mineralogy' },
+  { number: 905, label: 'Mining & Prospecting' },
+  { number: 908, label: 'Palaeogeography' },
+  { number: 910, label: 'Palaeontology' },
+  { number: 912, label: 'Petrology' },
+  { number: 914, label: 'Photogeology' },
+  { number: 916, label: 'Stratigraphy' },
+  { number: 920, label: 'Volcanology' },
+].sort((a, b) => a.number - b.number);
+
+// Institutional standard: codes are always 3-digit, zero-padded (e.g. '001'
+// not '1'). Sorting above stays numeric on t.number; this only affects the
+// display string and the report_topic value stored on each book.
+function padCode(n) {
+  return String(n).padStart(3, '0');
+}
+
+const MAP_FORMATS = [
+  { key: 'pdf', label: 'PDF' },
+  { key: 'jpg', label: 'JPG' },
+  { key: 'shapefile', label: 'Shapefile' },
+];
+
+const MAP_TYPES = [
+  { key: 'geological', label: 'Geological Maps', hasScale: true },
+  { key: 'hydrogeological', label: 'Hydrogeological Maps', hasScale: false },
+  { key: 'hydrochemical', label: 'Hydrochemical Maps', hasScale: false },
+  { key: 'engineering_geological', label: 'Engineering Geological Maps', hasScale: true },
+  { key: 'topo', label: 'Topo Maps', hasScale: false },
+];
+
+const SCALES_BY_MAP_TYPE = {
+  geological: ['1:50,000', '1:100,000', '1:250,000', '1:500,000', '1:1,000,000', '1:2,000,000'],
+  engineering_geological: ['1:50,000', '1:250,000'],
+};
+
+const YEAR_OPTIONS = [];
+for (let y = CURRENT_YEAR; y >= EARLIEST_YEAR; y--) YEAR_OPTIONS.push(y);
+
+// ============================================================================
+// SHARED HELPERS
+// ============================================================================
+
+function buildQueryParams(paramsObj) {
+  const qp = new URLSearchParams();
+  Object.entries(paramsObj).forEach(([k, v]) => {
+    if (v !== undefined && v !== null && v !== '') qp.append(k, v);
+  });
+  return qp;
+}
+
+// ============================================================================
+// REUSABLE: 5-way filter row (author / title / department / location / year range)
+// ============================================================================
+function LibFilterRow({ filters, setFilters, departmentOptions, locationOptions }) {
+  return (
+    <div className="lib-filters-row">
+      <div className="lib-filter-field">
+        <label>Title</label>
+        <input
+          placeholder="Search title..."
+          value={filters.title}
+          onChange={e => setFilters({ ...filters, title: e.target.value })}
+        />
+      </div>
+      <div className="lib-filter-field">
+        <label>Author</label>
+        <input
+          placeholder="Search author..."
+          value={filters.author}
+          onChange={e => setFilters({ ...filters, author: e.target.value })}
+        />
+      </div>
+      <div className="lib-filter-field">
+        <label>Department</label>
+        <select value={filters.department} onChange={e => setFilters({ ...filters, department: e.target.value })}>
+          <option value="">All</option>
+          {departmentOptions.map(d => <option key={d} value={d}>{d}</option>)}
+        </select>
+      </div>
+      <div className="lib-filter-field">
+        <label>Location</label>
+        <select value={filters.location} onChange={e => setFilters({ ...filters, location: e.target.value })}>
+          <option value="">All</option>
+          {locationOptions.map(l => <option key={l} value={l}>{l}</option>)}
+        </select>
+      </div>
+      <div className="lib-filter-field">
+        <label>Published year</label>
+        <div className="lib-year-range">
+          <select value={filters.yearFrom} onChange={e => setFilters({ ...filters, yearFrom: e.target.value })}>
+            <option value="">From</option>
+            {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+          <span>&rarr;</span>
+          <select value={filters.yearTo} onChange={e => setFilters({ ...filters, yearTo: e.target.value })}>
+            <option value="">To</option>
+            {YEAR_OPTIONS.map(y => <option key={y} value={y}>{y}</option>)}
+          </select>
+        </div>
+      </div>
+      <button
+        type="button"
+        className="lib-filter-reset"
+        onClick={() => setFilters({ title: '', author: '', department: '', location: '', yearFrom: '', yearTo: '' })}
+      >
+        Reset
+      </button>
+    </div>
+  );
+}
+
+// ============================================================================
+// DOCUMENT LIST PANEL
+// Used for both Technical Report topic lists and Map type/scale lists.
+// context = { category, reportTopic, mapType, mapFormat, scale }
+// ============================================================================
+function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, canDo, onBack }) {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [filters, setFilters] = useState({ title: '', author: '', department: '', location: '', yearFrom: '', yearTo: '' });
+
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentId, setCurrentId] = useState(null);
-  
-  // Adjusted form state tracking to match actual database schema
-  const [formData, setFormData] = useState({
-    title: '', author: '', department: '', location: '', published_year: ''
-  });
-
+  const [formData, setFormData] = useState({ title: '', author: '', department: '', location: '', published_year: '' });
   const [selectedFile, setSelectedFile] = useState(null);
 
-  const [filters, setFilters] = useState({ 
-    title: '', author: '', department: '', location: '', year: '' 
-  });
-
-  // --- VIEW MODAL STATES ---
   const [viewModal, setViewModal] = useState(false);
   const [selectedBook, setSelectedBook] = useState(null);
 
-  // Reads the ACCESS-CONTROL matrix admins toggle Granted/Denied for
-  const { can: canDo } = usePermissions(user?.role);
-  const canEdit = canDo('edit');
-  const canDelete = canDo('delete');
-  const canAdd = canDo('edit'); // adding a new record uses the same 'edit' permission allocation matrix
+  const fetchBooks = useCallback(() => {
+    setLoading(true);
+    const qp = buildQueryParams({
+      title: filters.title,
+      author: filters.author,
+      department: filters.department,
+      location: filters.location,
+      yearFrom: filters.yearFrom,
+      yearTo: filters.yearTo,
+      category: context.category,
+      reportTopic: context.reportTopic,
+      mapType: context.mapType,
+      mapFormat: context.mapFormat,
+      scale: context.scale,
+    });
+    fetch(`${API}/api/books/search?${qp.toString()}`)
+      .then(res => res.json())
+      .then(data => { setBooks(Array.isArray(data) ? data : []); setLoading(false); })
+      .catch(err => { console.error('Database fetch query failure:', err); setLoading(false); });
+  }, [filters, context]);
 
-  const isPrivilegedAdmin = 
-    user?.role === 'admin' || 
-    user?.role === 'Department Head' || 
-    user?.role === 'Senior Officer' ||
-    user?.role === 'manager';
-
-  // --- REAL-TIME BACKEND SEARCH PIPELINE ---
   useEffect(() => {
-    const fetchBooksFromDatabase = () => {
-      setLoading(true);
-      
-      const queryParams = new URLSearchParams();
-      if (filters.title) queryParams.append('title', filters.title);
-      if (filters.author) queryParams.append('author', filters.author);
-      if (filters.department) queryParams.append('department', filters.department);
-      if (filters.location) queryParams.append('location', filters.location);
-      if (filters.year) queryParams.append('year', filters.year);
+    const delay = setTimeout(fetchBooks, 350);
+    return () => clearTimeout(delay);
+  }, [fetchBooks]);
 
-      fetch(`http://localhost:5000/api/books/search?${queryParams.toString()}`)
-        .then(res => res.json())
-        .then(data => { 
-          setBooks(data); 
-          setLoading(false); 
-        })
-        .catch(err => { 
-          console.error("Database fetch query failure:", err); 
-          setLoading(false); 
-        });
-    };
+  const departmentOptions = useMemo(() => Array.from(new Set(books.map(b => b.department).filter(Boolean))).sort(), [books]);
+  const locationOptions = useMemo(() => Array.from(new Set(books.map(b => b.location).filter(Boolean))).sort(), [books]);
 
-    const delayDebounceFn = setTimeout(() => {
-      fetchBooksFromDatabase();
-    }, 400); // 400ms debounce window to protect system connection pools from typing spikes
-
-    return () => clearTimeout(delayDebounceFn);
-  }, [filters]); 
-
-  // --- DYNAMIC FILTER SELECTION LISTS ---
-  const departmentOptions = useMemo(() => {
-    const values = books.map(b => b.department).filter(Boolean);
-    return Array.from(new Set(values)).sort();
-  }, [books]);
-
-  const locationOptions = useMemo(() => {
-    const values = books.map(b => b.location).filter(Boolean);
-    return Array.from(new Set(values)).sort();
-  }, [books]);
-
-  const yearOptions = useMemo(() => {
-    const values = books.map(b => b.published_year).filter(Boolean);
-    return Array.from(new Set(values)).sort((a, b) => b - a);
-  }, [books]);
-
-  // --- MANDATORY MULTI-TIER MAKER -> CHECKER -> AUTHORIZER INTERCEPTOR PIPELINE ---
   const handleRequestSubmission = async (actionType, targetLabel, contextPayload = {}, uploadedFile = null) => {
     if (!canDo(actionType)) {
       alert(`Access Denied: Your role does not have permission to request a record ${actionType}.`);
       return false;
     }
-
     const userReason = window.prompt(`Enter your business reason to initiate this ${actionType} request:`);
     if (!userReason) return false;
 
@@ -102,96 +255,119 @@ const Dashboard = ({ user, setUser }) => {
     multiPartForm.append('requestedPermission', actionType);
     multiPartForm.append('targetLabel', targetLabel);
     multiPartForm.append('reason', userReason);
-    
-    if (contextPayload.targetId) {
-      multiPartForm.append('targetBookId', contextPayload.targetId);
-    } else if (contextPayload.bookId) {
-      multiPartForm.append('targetBookId', contextPayload.bookId);
-    }
 
-    multiPartForm.append('metaContext', JSON.stringify(contextPayload));
+    if (contextPayload.targetId) multiPartForm.append('targetBookId', contextPayload.targetId);
+    else if (contextPayload.bookId) multiPartForm.append('targetBookId', contextPayload.bookId);
 
-    if (uploadedFile) {
-      multiPartForm.append('pdfFile', uploadedFile);
-    }
+    // Stamp the current library-category context onto every add/edit so the
+    // record lands back in the exact same topic/map-type/scale bucket it was
+    // created from.
+    const mergedContext = {
+      ...contextPayload,
+      category: context.category,
+      reportTopic: context.reportTopic,
+      mapType: context.mapType,
+      mapFormat: context.mapFormat,
+      scale: context.scale,
+    };
+    multiPartForm.append('metaContext', JSON.stringify(mergedContext));
+
+    if (uploadedFile) multiPartForm.append('pdfFile', uploadedFile);
 
     try {
-      const res = await fetch('http://localhost:5000/api/office-requests', {
-        method: 'POST',
-        body: multiPartForm
-      });
-      
+      const res = await fetch(`${API}/api/office-requests`, { method: 'POST', body: multiPartForm });
       if (res.ok) {
-        alert("Workflow request initiated successfully! It has been routed to the approval chain.");
+        alert('Workflow request initiated successfully! It has been routed to the approval chain.');
         return true;
-      } else {
-        const errData = await res.json();
-        alert(`Pipeline error: ${errData.message}`);
-        return false;
       }
+      const errData = await res.json();
+      alert(`Pipeline error: ${errData.message}`);
+      return false;
     } catch (err) {
-      console.error("Failed to generate workflow instance:", err);
-      alert("System error tracking the submission workflow instance.");
+      console.error('Failed to generate workflow instance:', err);
+      alert('System error tracking the submission workflow instance.');
       return false;
     }
   };
 
   const executeDownload = async (book) => {
-    if (!book.file_path) {
-      alert("No file available for download.");
-      return;
+    if (!book.file_path) { alert('No file available for download.'); return; }
+    if (!canDo('download')) { alert('Access Denied: Your role does not have permission to download.'); return; }
+
+    try {
+      const initRes = await fetch(`${API}/api/downloads/initiate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookId: book.id }),
+      });
+      const quote = await initRes.json();
+      if (!initRes.ok) { alert(quote.message || 'Could not get a download quote.'); return; }
+
+      const confirmMsg = quote.requiresApproval
+        ? `"${quote.title}" is classified ${quote.securityClass}. It needs ${quote.approvalChain.length}-step approval before payment.\nFee: ${quote.totalFee} ETB (${quote.pageCount} pages @ ${quote.feePerPage}/page).\n\nSubmit the request?`
+        : `"${quote.title}" — ${quote.totalFee} ETB (${quote.pageCount} pages @ ${quote.feePerPage}/page).\n\nPay and download now?`;
+      if (!window.confirm(confirmMsg)) return;
+
+      let reason = '';
+      if (quote.requiresApproval) {
+        reason = window.prompt('Enter your business reason for this download request:') || '';
+        if (!reason.trim()) return;
+      }
+
+      const reqRes = await fetch(`${API}/api/downloads/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookId: book.id, userId: user.id, reason }),
+      });
+      const request = await reqRes.json();
+      if (!reqRes.ok) { alert(request.message || 'Could not submit the download request.'); return; }
+
+      if (request.stage === 'approved') {
+        // Normal-class documents land on 'approved' immediately — go straight to payment.
+        const payRes = await fetch(`${API}/api/payments/checkout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestId: request.id, userId: user.id }),
+        });
+        const payment = await payRes.json();
+        if (!payRes.ok) { alert(payment.message || 'Payment failed.'); return; }
+        window.open(`${API}${payment.downloadUrl}`, '_blank');
+      } else {
+        alert(`Request ${request.request_code} submitted for approval (${quote.securityClass}). You'll be notified once it's approved. Note: this app doesn't yet have a "pending downloads" screen to resume payment afterward — that's a follow-up piece someone still needs to build.`);
+      }
+    } catch (err) {
+      console.error('Download flow failed:', err);
+      alert('System error during the download flow.');
     }
-    await handleRequestSubmission('download', `Download Document: ${book.title}`, {
-      bookId: book.id,
-      filePath: book.file_path
-    });
   };
 
   const openViewPreview = (book) => {
-    if (book.file_path) {
-      setSelectedBook(book);
-      setViewModal(true);
-    } else { 
-      alert("No PDF associated with this record."); 
-    }
+    if (book.file_path) { setSelectedBook(book); setViewModal(true); }
+    else alert('No PDF associated with this record.');
   };
 
-  const handleLogout = async () => {
-    try {
-      await fetch('http://localhost:5000/api/logout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user?.id })
-      });
-    } catch (err) {
-      console.error("Logout request failed:", err);
-    }
-    setUser(null);
-    localStorage.removeItem('user');
-  };
-  
-  const handleOpenAdd = () => { 
-    setFormData({ title: '', author: '', department: '', location: '', published_year: '' }); 
+  const handleOpenAdd = () => {
+    setFormData({ title: '', author: '', department: '', location: '', published_year: '' });
     setSelectedFile(null);
-    setIsEditing(false); 
-    setShowModal(true); 
+    setIsEditing(false);
+    setShowModal(true);
   };
-  
-  const handleOpenEdit = (book) => { 
+
+  const handleOpenEdit = (book) => {
     setFormData({
       title: book.title || '',
       author: book.author || '',
       department: book.department || '',
       location: book.location || '',
-      published_year: book.published_year || ''
-    }); 
-    setCurrentId(book.id); 
+      published_year: book.published_year || '',
+    });
+    setCurrentId(book.id);
     setSelectedFile(null);
-    setIsEditing(true); 
-    setShowModal(true); 
+    setIsEditing(true);
+    setShowModal(true);
   };
 
-  const handleDelete = async (id) => { 
+  const handleDelete = async (id) => {
     const targetBook = books.find(b => b.id === id);
     const targetTitle = targetBook ? targetBook.title : `Record ID #${id}`;
     await handleRequestSubmission('delete', `Delete Record: ${targetTitle}`, { bookId: id });
@@ -199,118 +375,60 @@ const Dashboard = ({ user, setUser }) => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    const itemContext = {
-      ...formData,
-      isEditing: isEditing,
-      targetId: isEditing ? currentId : null
-    };
-
+    const itemContext = { ...formData, isEditing, targetId: isEditing ? currentId : null };
     const targetLabel = isEditing ? `Update Record: ${formData.title}` : `Create New Record: ${formData.title}`;
     const actionType = isEditing ? 'edit' : 'add';
-
     const success = await handleRequestSubmission(actionType, targetLabel, itemContext, selectedFile);
-    if (success) {
-      setShowModal(false);
-      setSelectedFile(null);
-    }
+    if (success) { setShowModal(false); setSelectedFile(null); }
   };
 
   return (
-    <div className="dashboard-container-gold">
-      <div className="dashboard-main-gold">
-        <div className="main-header">
-          <h2 className="section-title">Ethiopia Geological Institute Library Records</h2>
-          
-          <div className="header-action-button-group" style={{ display: 'flex', gap: '12px' }}>
-            {isPrivilegedAdmin && (
-              <button 
-                type="button"
-                className="btn-add-elegant" 
-                style={{ backgroundColor: '#1a5e4b', borderColor: '#0d3d31', color: '#fff' }}
-                onClick={() => setUser({ ...user })}
-              >
-                🛡️ Open Management Console
-              </button>
-            )}
+    <div>
+      <h3 className="lib-panel-title">{title}</h3>
 
-            {canAdd && <button className="btn-add-elegant" onClick={handleOpenAdd}>+ New Record</button>}
-          </div>
+      <LibFilterRow filters={filters} setFilters={setFilters} departmentOptions={departmentOptions} locationOptions={locationOptions} />
+
+      {canAdd && (
+        <div style={{ marginBottom: '16px' }}>
+          <button className="btn-add-elegant" onClick={handleOpenAdd}>+ New Record</button>
         </div>
+      )}
 
-        {loading ? <div className="loader-text">Querying Live Vault...</div> : (
-          <div className="results-list">
-            {books.map(book => {
-              const totalPages = book.department === 'Novel' ? 20 : 12; 
-              
-              return (
-                <div key={book.id} className="book-card-gold">
-                  <div className="book-left-content">
-                    <div className="book-icon-box-gold">📂</div>
-                    <div className="book-info">
-                      <h3>{book.title}</h3>
-                      <div className="info-grid">
-                        <span><strong>Author:</strong> {book.author}</span>
-                        <span><strong>Dept:</strong> {book.department}</span>
-                        <span><strong>Loc:</strong> {book.location}</span>
-                        <span><strong>Year:</strong> {book.published_year}</span>
-                        <span><strong>Pages:</strong> {book.page_count || totalPages} pages</span>
-                      </div>
-                    </div>
-                  </div>
-
-                  <div className="book-actions">
-                    <div className="action-button-row">
-                      <button className="btn-view" onClick={() => openViewPreview({ ...book, page_count: book.page_count || totalPages })}>View</button>
-                      {canDo('download') && (
-                        <button className="btn-download" onClick={() => executeDownload({ ...book, page_count: book.page_count || totalPages })}>Download</button>
-                      )}
-                    </div>
-                    {(canEdit || canDelete) && (
-                      <div className="admin-btns">
-                        {canEdit && <button className="edit-link" onClick={() => handleOpenEdit(book)}>Edit</button>}
-                        {canDelete && <button className="delete-link" onClick={() => handleDelete(book.id)}>Delete</button>}
-                      </div>
-                    )}
+      {loading ? <div className="loader-text">Querying Live Vault...</div> : (
+        <div className="results-list">
+          {books.map(book => (
+            <div key={book.id} className="book-card-gold">
+              <div className="book-left-content">
+                <div className="book-icon-box-gold">📂</div>
+                <div className="book-info">
+                  <h3>{book.title}</h3>
+                  <div className="info-grid">
+                    <span><strong>Author:</strong> {book.author}</span>
+                    <span><strong>Dept:</strong> {book.department}</span>
+                    <span><strong>Loc:</strong> {book.location}</span>
+                    <span><strong>Year:</strong> {book.published_year}</span>
+                    <span><strong>Pages:</strong> {book.page_count || 12} pages</span>
                   </div>
                 </div>
-              );
-            })}
-            {books.length === 0 && <div className="no-records-msg">No structural assets match your criteria.</div>}
-          </div>
-        )}
-      </div>
-
-      {/* SIDEBAR FILTERS */}
-      <div className="dashboard-sidebar-gold">
-        <div className="profile-section-gold">
-          <div className="avatar-gold">👤</div>
-          <h3>{user?.username}</h3>
-          <span className="role-tag">{user?.role}</span>
+              </div>
+              <div className="book-actions">
+                <div className="action-button-row">
+                  <button className="btn-view" onClick={() => openViewPreview(book)}>View</button>
+                  {canDo('download') && <button className="btn-download" onClick={() => executeDownload(book)}>Download</button>}
+                </div>
+                {(canEdit || canDelete) && (
+                  <div className="admin-btns">
+                    {canEdit && <button className="edit-link" onClick={() => handleOpenEdit(book)}>Edit</button>}
+                    {canDelete && <button className="delete-link" onClick={() => handleDelete(book.id)}>Delete</button>}
+                  </div>
+                )}
+              </div>
+            </div>
+          ))}
+          {books.length === 0 && <div className="no-records-msg">No structural assets match your criteria.</div>}
         </div>
+      )}
 
-        <div className="sidebar-group">
-          <h4>Live Server Filter</h4>
-          <div className="filter-input-gold">
-            <label>Title</label>
-            <input placeholder="Search title..." value={filters.title} onChange={e => setFilters({...filters, title: e.target.value})} />
-          </div>
-
-          <div className="filter-input-gold">
-            <label>Author</label>
-            <input placeholder="Search author..." value={filters.author} onChange={e => setFilters({...filters, author: e.target.value})} />
-          </div>
-
-          <FilterDropdown label="Department" options={departmentOptions} value={filters.department} className="select-gold" onChange={e => setFilters({...filters, department: e.target.value})} />
-          <FilterDropdown label="Location" options={locationOptions} value={filters.location} className="select-gold" onChange={e => setFilters({...filters, location: e.target.value})} />
-          <FilterDropdown label="Year" options={yearOptions} value={filters.year} className="select-gold" onChange={e => setFilters({...filters, year: e.target.value})} />
-
-          <button className="btn-reset" onClick={() => setFilters({title:'', author:'', department:'', location:'', year:''})}>Reset Filters</button>
-        </div>
-        <button className="logout-btn-red" onClick={handleLogout}>Logout System</button>
-      </div>
-
-      {/* ── UNRESTRICTED FULL-PAGE PREVIEW MODAL ── */}
       {viewModal && selectedBook && (
         <div className="modal-overlay">
           <div className="modal-content modal-content--viewer" style={{ maxWidth: '1100px', width: '95%', display: 'flex', flexDirection: 'column' }}>
@@ -318,62 +436,35 @@ const Dashboard = ({ user, setUser }) => {
               <h3 style={{ margin: 0, color: '#1e293b' }}>Document Full View: {selectedBook.title}</h3>
               <button className="close-viewer-btn" onClick={() => setViewModal(false)}>✕ Close Preview</button>
             </div>
-            
             <div className="document-scroll-container" style={{ position: 'relative', height: '80vh', backgroundColor: '#525659', marginTop: '10px', borderRadius: '4px', overflow: 'hidden' }}>
-              
-              {/* Native Document High Compatibility Embed Object */}
-              <object
-                data={`http://localhost:5000/uploades/${selectedBook.file_path}#toolbar=1&navpanes=1`}
-                type="application/pdf"
-                width="100%"
-                height="100%"
-                style={{ border: 'none' }}
-              >
-                {/* Fallback frame layer if browser plugins block object streams */}
-                <iframe
-                  src={`http://localhost:5000/uploades/${selectedBook.file_path}#toolbar=1&navpanes=1`}
-                  title="PDF Fallback Full View"
-                  width="100%"
-                  height="100%"
-                  style={{ border: 'none' }}
-                />
+              <object data={`${API}/uploades/${selectedBook.file_path}#toolbar=1&navpanes=1`} type="application/pdf" width="100%" height="100%" style={{ border: 'none' }}>
+                <iframe src={`${API}/uploades/${selectedBook.file_path}#toolbar=1&navpanes=1`} title="PDF Fallback Full View" width="100%" height="100%" style={{ border: 'none' }} />
               </object>
-
             </div>
           </div>
         </div>
       )}
 
-      {/* FORM MODAL */}
       {showModal && (
         <div className="modal-overlay">
           <div className="modal-content">
-            <h3>{isEditing ? "Request Update Authorization" : "Request Creation Authorization"}</h3>
+            <h3>{isEditing ? 'Request Update Authorization' : 'Request Creation Authorization'}</h3>
             <form onSubmit={handleSubmit}>
               <div className="modal-form-body">
-                <input placeholder="Title" value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} required />
-                <input placeholder="Author" value={formData.author} onChange={e => setFormData({...formData, author: e.target.value})} />
-                
+                <input placeholder="Title" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} required />
+                <input placeholder="Author" value={formData.author} onChange={e => setFormData({ ...formData, author: e.target.value })} />
                 <div className="form-row-dual">
-                  <input placeholder="Dept" value={formData.department} onChange={e => setFormData({...formData, department: e.target.value})} />
-                  <input placeholder="Year" value={formData.published_year} onChange={e => setFormData({...formData, published_year: e.target.value})} />
+                  <input placeholder="Dept" value={formData.department} onChange={e => setFormData({ ...formData, department: e.target.value })} />
+                  <input placeholder="Year" value={formData.published_year} onChange={e => setFormData({ ...formData, published_year: e.target.value })} />
                 </div>
-                
-                <input placeholder="Location" value={formData.location} onChange={e => setFormData({...formData, location: e.target.value})} />
-
+                <input placeholder="Location" value={formData.location} onChange={e => setFormData({ ...formData, location: e.target.value })} />
                 <div className="filter-input-gold" style={{ marginTop: '15px', marginBottom: '10px' }}>
                   <label style={{ fontSize: '12px', color: '#b2945b', display: 'block', marginBottom: '4px' }}>
-                    {isEditing ? "Replace PDF Document Asset (Optional Context)" : "Upload Document PDF"}
+                    {isEditing ? 'Replace Document Asset (Optional)' : 'Upload Document'}
                   </label>
-                  <input 
-                    type="file" 
-                    accept="application/pdf" 
-                    onChange={e => setSelectedFile(e.target.files[0])} 
-                    required={!isEditing} 
-                  />
+                  <input type="file" onChange={e => setSelectedFile(e.target.files[0])} required={!isEditing} />
                 </div>
               </div>
-              
               <div className="modal-footer">
                 <button type="button" onClick={() => setShowModal(false)}>Cancel</button>
                 <button type="submit" className="save-btn">Submit Request</button>
@@ -382,6 +473,401 @@ const Dashboard = ({ user, setUser }) => {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+// ============================================================================
+// OTHER PUBLICATIONS — plain file list, no metadata / no search
+// ============================================================================
+function OtherPublicationsPanel({ user, canAdd, canDelete, canDo }) {
+  const [files, setFiles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [showModal, setShowModal] = useState(false);
+  const [title, setTitle] = useState('');
+  const [selectedFile, setSelectedFile] = useState(null);
+
+  const fetchFiles = useCallback(() => {
+    setLoading(true);
+    fetch(`${API}/api/books/search?category=other_publication`)
+      .then(res => res.json())
+      .then(data => { setFiles(Array.isArray(data) ? data : []); setLoading(false); })
+      .catch(err => { console.error(err); setLoading(false); });
+  }, []);
+
+  useEffect(() => { fetchFiles(); }, [fetchFiles]);
+
+  const submitRequest = async (actionType, targetLabel, contextPayload = {}, uploadedFile = null) => {
+    if (!canDo(actionType)) { alert(`Access Denied: Your role does not have permission to ${actionType}.`); return false; }
+    const userReason = window.prompt(`Enter your business reason to initiate this ${actionType} request:`);
+    if (!userReason) return false;
+
+    const form = new FormData();
+    form.append('makerId', user.id);
+    form.append('makerRole', user.role);
+    form.append('requestType', 'permission');
+    form.append('requestedPermission', actionType);
+    form.append('targetLabel', targetLabel);
+    form.append('reason', userReason);
+    if (contextPayload.targetId) form.append('targetBookId', contextPayload.targetId);
+    form.append('metaContext', JSON.stringify({ ...contextPayload, category: 'other_publication' }));
+    if (uploadedFile) form.append('pdfFile', uploadedFile);
+
+    try {
+      const res = await fetch(`${API}/api/office-requests`, { method: 'POST', body: form });
+      if (res.ok) { alert('Request submitted to the approval chain.'); return true; }
+      const errData = await res.json();
+      alert(`Pipeline error: ${errData.message}`);
+      return false;
+    } catch (err) {
+      console.error(err);
+      alert('System error submitting the request.');
+      return false;
+    }
+  };
+
+  const handleUpload = async (e) => {
+    e.preventDefault();
+    const finalTitle = title.trim() || (selectedFile ? selectedFile.name : 'Untitled Publication');
+    const ok = await submitRequest('add', `Create New Record: ${finalTitle}`, { title: finalTitle, isEditing: false, targetId: null }, selectedFile);
+    if (ok) { setShowModal(false); setTitle(''); setSelectedFile(null); fetchFiles(); }
+  };
+
+  const handleDelete = async (f) => {
+    await submitRequest('delete', `Delete Record: ${f.title}`, { bookId: f.id });
+  };
+
+  const handleDownload = async (f) => {
+    if (!f.file_path) { alert('No file available for download.'); return; }
+    if (!canDo('download')) { alert('Access Denied: Your role does not have permission to download.'); return; }
+
+    try {
+      const initRes = await fetch(`${API}/api/downloads/initiate`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookId: f.id }),
+      });
+      const quote = await initRes.json();
+      if (!initRes.ok) { alert(quote.message || 'Could not get a download quote.'); return; }
+
+      const confirmMsg = quote.requiresApproval
+        ? `"${quote.title}" is classified ${quote.securityClass}. It needs ${quote.approvalChain.length}-step approval before payment.\nFee: ${quote.totalFee} ETB (${quote.pageCount} pages @ ${quote.feePerPage}/page).\n\nSubmit the request?`
+        : `"${quote.title}" — ${quote.totalFee} ETB (${quote.pageCount} pages @ ${quote.feePerPage}/page).\n\nPay and download now?`;
+      if (!window.confirm(confirmMsg)) return;
+
+      let reason = '';
+      if (quote.requiresApproval) {
+        reason = window.prompt('Enter your business reason for this download request:') || '';
+        if (!reason.trim()) return;
+      }
+
+      const reqRes = await fetch(`${API}/api/downloads/request`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ bookId: f.id, userId: user.id, reason }),
+      });
+      const request = await reqRes.json();
+      if (!reqRes.ok) { alert(request.message || 'Could not submit the download request.'); return; }
+
+      if (request.stage === 'approved') {
+        const payRes = await fetch(`${API}/api/payments/checkout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ requestId: request.id, userId: user.id }),
+        });
+        const payment = await payRes.json();
+        if (!payRes.ok) { alert(payment.message || 'Payment failed.'); return; }
+        window.open(`${API}${payment.downloadUrl}`, '_blank');
+      } else {
+        alert(`Request ${request.request_code} submitted for approval (${quote.securityClass}). You'll be notified once it's approved.`);
+      }
+    } catch (err) {
+      console.error('Download flow failed:', err);
+      alert('System error during the download flow.');
+    }
+  };
+
+  return (
+    <div>
+      <h3 className="lib-panel-title">Other Publications</h3>
+      {canAdd && (
+        <div style={{ marginBottom: '16px' }}>
+          <button className="btn-add-elegant" onClick={() => setShowModal(true)}>+ Upload Publication</button>
+        </div>
+      )}
+      {loading ? <div className="loader-text">Querying Live Vault...</div> : (
+        <div className="lib-other-pub-list">
+          {files.map(f => (
+            <div key={f.id} className="lib-other-pub-row">
+              <div className="lib-other-pub-name">📄 {f.title}</div>
+              <div className="lib-other-pub-actions">
+                {f.file_path && (
+                  <a className="btn-view" href={`${API}/uploades/${f.file_path}`} target="_blank" rel="noreferrer">View</a>
+                )}
+                {canDo('download') && <button className="btn-download" onClick={() => handleDownload(f)}>Download</button>}
+                {canDelete && <button className="delete-link" onClick={() => handleDelete(f)}>Delete</button>}
+              </div>
+            </div>
+          ))}
+          {files.length === 0 && <div className="no-records-msg">No publications uploaded yet.</div>}
+        </div>
+      )}
+
+      {showModal && (
+        <div className="modal-overlay">
+          <div className="modal-content">
+            <h3>Request Upload Authorization</h3>
+            <form onSubmit={handleUpload}>
+              <div className="modal-form-body">
+                <input placeholder="Title (optional — filename used if left blank)" value={title} onChange={e => setTitle(e.target.value)} />
+                <input type="file" onChange={e => setSelectedFile(e.target.files[0])} required />
+              </div>
+              <div className="modal-footer">
+                <button type="button" onClick={() => setShowModal(false)}>Cancel</button>
+                <button type="submit" className="save-btn">Submit Request</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ============================================================================
+// MAIN DASHBOARD — Library category navigation shell
+// ============================================================================
+const Dashboard = ({ user, setUser }) => {
+  // view: 'home' | 'tech_topics' | 'tech_list' | 'maps_format' | 'maps_type' | 'maps_scale' | 'map_list' | 'other_pubs'
+  const [view, setView] = useState('home');
+  const [navContext, setNavContext] = useState({ category: null, reportTopic: null, mapType: null, mapFormat: null, scale: null });
+  const [topicSearch, setTopicSearch] = useState('');
+
+  const { can: canDo } = usePermissions(user?.role);
+  const canEdit = canDo('edit');
+  const canDelete = canDo('delete');
+  const canAdd = canDo('edit');
+
+  const isPrivilegedAdmin =
+    user?.role === 'admin' ||
+    user?.role === 'Department Head' ||
+    user?.role === 'Senior Officer' ||
+    user?.role === 'manager';
+
+  const handleLogout = async () => {
+    try {
+      await fetch(`${API}/api/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: user?.id }),
+      });
+    } catch (err) {
+      console.error('Logout request failed:', err);
+    }
+    setUser(null);
+    localStorage.removeItem('user');
+  };
+
+  const goHome = () => { setView('home'); setNavContext({ category: null, reportTopic: null, mapType: null, mapFormat: null, scale: null }); setTopicSearch(''); };
+
+  const filteredTechTopics = useMemo(() => {
+    const q = topicSearch.trim().toLowerCase();
+    if (!q) return TECHNICAL_REPORT_TOPICS;
+    return TECHNICAL_REPORT_TOPICS.filter(t => padCode(t.number).includes(q) || t.label.toLowerCase().includes(q));
+  }, [topicSearch]);
+
+  const renderBreadcrumb = () => {
+    if (view === 'home') return null;
+    return (
+      <div className="lib-breadcrumb">
+        <button className="lib-back-btn" onClick={goHome}>← Library Home</button>
+        {view !== 'tech_topics' && view !== 'maps_format' && view !== 'other_pubs' && (
+          <button
+            className="lib-back-btn"
+            onClick={() => {
+              if (view === 'tech_list') setView('tech_topics');
+              else if (view === 'maps_type') setView('maps_format');
+              else if (view === 'maps_scale') setView('maps_type');
+              else if (view === 'map_list') setView(navContext.mapType && SCALES_BY_MAP_TYPE[navContext.mapType] ? 'maps_scale' : 'maps_type');
+            }}
+          >
+            ← Back
+          </button>
+        )}
+      </div>
+    );
+  };
+
+  const renderHome = () => (
+    <div className="lib-home-grid">
+      <div className="lib-card" onClick={() => setView('tech_topics')}>
+        <div className="lib-card-icon">📑</div>
+        <div className="lib-card-title">Technical Reports</div>
+        <div className="lib-card-sub">Browse by report number</div>
+      </div>
+      <div className="lib-card" onClick={() => setView('maps_format')}>
+        <div className="lib-card-icon">🗺️</div>
+        <div className="lib-card-title">Maps</div>
+        <div className="lib-card-sub">PDF · JPG · Shapefile</div>
+      </div>
+      <div className="lib-card" onClick={() => setView('other_pubs')}>
+        <div className="lib-card-icon">📚</div>
+        <div className="lib-card-title">Other Publications</div>
+        <div className="lib-card-sub">General document archive</div>
+      </div>
+    </div>
+  );
+
+  const renderTechTopics = () => (
+    <div>
+      <h3 className="lib-panel-title">Technical Reports</h3>
+      <input
+        className="lib-search-box"
+        placeholder="Search by report name or number..."
+        value={topicSearch}
+        onChange={e => setTopicSearch(e.target.value)}
+      />
+      <div className="lib-btn-grid">
+        {filteredTechTopics.map(t => (
+          <div
+            key={t.number}
+            className="lib-topic-btn"
+            onClick={() => {
+              setNavContext({ category: 'technical_report', reportTopic: `${padCode(t.number)} ${t.label}`, mapType: null, mapFormat: null, scale: null });
+              setView('tech_list');
+            }}
+          >
+            <span className="lib-topic-number">{padCode(t.number)}</span>
+            <div className="lib-topic-label">{t.label}</div>
+          </div>
+        ))}
+      </div>
+      {filteredTechTopics.length === 0 && <div className="lib-empty-note">No matching report topics.</div>}
+    </div>
+  );
+
+  const renderMapsFormat = () => (
+    <div>
+      <h3 className="lib-panel-title">Maps</h3>
+      <div className="lib-btn-grid">
+        {MAP_FORMATS.map(f => (
+          <div
+            key={f.key}
+            className="lib-format-btn"
+            onClick={() => { setNavContext({ ...navContext, category: 'map', mapFormat: f.key, mapType: null, scale: null }); setView('maps_type'); }}
+          >
+            {f.label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderMapsType = () => (
+    <div>
+      <h3 className="lib-panel-title">Maps — {MAP_FORMATS.find(f => f.key === navContext.mapFormat)?.label}</h3>
+      <div className="lib-btn-grid">
+        {MAP_TYPES.map(m => (
+          <div
+            key={m.key}
+            className="lib-maptype-btn"
+            onClick={() => {
+              const next = { ...navContext, mapType: m.key, scale: null };
+              setNavContext(next);
+              setView(m.hasScale ? 'maps_scale' : 'map_list');
+            }}
+          >
+            {m.label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
+  const renderMapsScale = () => {
+    const scales = SCALES_BY_MAP_TYPE[navContext.mapType] || [];
+    const typeLabel = MAP_TYPES.find(m => m.key === navContext.mapType)?.label;
+    return (
+      <div>
+        <h3 className="lib-panel-title">{typeLabel} — Select Scale</h3>
+        <div className="lib-btn-grid">
+          {scales.map(s => (
+            <div key={s} className="lib-scale-btn" onClick={() => { setNavContext({ ...navContext, scale: s }); setView('map_list'); }}>
+              {s}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
+  };
+
+  const panelTitleForList = () => {
+    if (navContext.category === 'technical_report') return `Technical Reports — ${navContext.reportTopic}`;
+    const typeLabel = MAP_TYPES.find(m => m.key === navContext.mapType)?.label || 'Maps';
+    const formatLabel = MAP_FORMATS.find(f => f.key === navContext.mapFormat)?.label || '';
+    return navContext.scale ? `${typeLabel} — ${navContext.scale} (${formatLabel})` : `${typeLabel} (${formatLabel})`;
+  };
+
+  return (
+    <div className="dashboard-container-gold">
+      <div className="dashboard-main-gold">
+        <div className="main-header">
+          <h2 className="section-title">Ethiopia Geological Institute Library Records</h2>
+          {isPrivilegedAdmin && (
+            <button
+              type="button"
+              className="btn-add-elegant"
+              style={{ backgroundColor: '#1a5e4b', borderColor: '#0d3d31', color: '#fff' }}
+              onClick={() => setUser({ ...user })}
+            >
+              🛡️ Open Management Console
+            </button>
+          )}
+        </div>
+
+        <div className="lib-root">
+          {renderBreadcrumb()}
+          {view === 'home' && renderHome()}
+          {view === 'tech_topics' && renderTechTopics()}
+          {view === 'tech_list' && (
+            <DocumentListPanel
+              title={panelTitleForList()}
+              context={navContext}
+              user={user}
+              canEdit={canEdit}
+              canDelete={canDelete}
+              canAdd={canAdd}
+              canDo={canDo}
+            />
+          )}
+          {view === 'maps_format' && renderMapsFormat()}
+          {view === 'maps_type' && renderMapsType()}
+          {view === 'maps_scale' && renderMapsScale()}
+          {view === 'map_list' && (
+            <DocumentListPanel
+              title={panelTitleForList()}
+              context={navContext}
+              user={user}
+              canEdit={canEdit}
+              canDelete={canDelete}
+              canAdd={canAdd}
+              canDo={canDo}
+            />
+          )}
+          {view === 'other_pubs' && (
+            <OtherPublicationsPanel user={user} canAdd={canAdd} canDelete={canDelete} canDo={canDo} />
+          )}
+        </div>
+      </div>
+
+      <div className="dashboard-sidebar-gold">
+        <div className="profile-section-gold">
+          <div className="avatar-gold">👤</div>
+          <h3>{user?.username}</h3>
+          <span className="role-tag">{user?.role}</span>
+        </div>
+        <button className="logout-btn-red" onClick={handleLogout}>Logout System</button>
+      </div>
     </div>
   );
 };

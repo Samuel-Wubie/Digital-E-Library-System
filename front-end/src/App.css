@@ -1,26 +1,51 @@
 /* ============================================================================
-   LOGIN SCREEN
-   Scoped under .login-page. Same visual language as SignUp.css and
-   ForgotPassword.css (dark gradient backdrop, white card, blue accent) so
-   all three auth screens read as one consistent flow.
+   LOGIN SCREEN — full-screen split layout
+   Left half: library image (edge-to-edge). Right half: login form.
    ============================================================================ */
 
 .login-page {
-  min-height: 100vh;
+  height: 100vh;
   width: 100%;
   display: flex;
-  align-items: center;
-  justify-content: center;
   background: linear-gradient(135deg, #0f172a 0%, #1e293b 45%, #0b1120 100%);
   font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
-  padding: 2rem 1rem;
   box-sizing: border-box;
+  overflow: hidden;
 }
 
 .login-page *,
 .login-page *::before,
 .login-page *::after {
   box-sizing: inherit;
+}
+
+/* Left half — library image fills the space */
+.login-branding {
+  flex: 1 1 50%;
+  width: 50%;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.login-branding-image {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;   /* fills the half; use 'contain' to show whole image */
+}
+
+/* Right half — login form centered */
+.login-form-side {
+  flex: 1 1 50%;
+  width: 50%;
+  height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 2rem;
+  overflow-y: auto;
 }
 
 .login-card {
@@ -38,17 +63,11 @@
 }
 
 .login-logo {
-  width: 48px;
-  height: 48px;
+  width: 64px;
+  height: 64px;
   margin: 0 auto 1rem;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 1.25rem;
+  border-radius: 50%;
+  object-fit: contain;
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
 }
 
@@ -169,6 +188,17 @@
 .login-footer-divider {
   color: #cbd5e1;
   font-size: 0.8rem;
+}
+
+/* Mobile: hide image, form takes full width */
+@media (max-width: 900px) {
+  .login-branding {
+    display: none;
+  }
+  .login-form-side {
+    flex: 1 1 100%;
+    width: 100%;
+  }
 }
 
 @media (max-width: 480px) {

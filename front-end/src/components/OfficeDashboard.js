@@ -19,6 +19,12 @@ const API = "http://localhost:5000";
 // (or finalizes it at Department Head); Reject requires a reason and ends
 // the chain immediately.
 //
+// Download requests use a VARIABLE-length chain (r.requiredStages) instead
+// of the fixed 3-step permission chain — 'medium' security class stops
+// after Senior Officer with no Department Head step; 'strict' goes through
+// all three. The pipeline renderer below reads requiredStages per-row
+// rather than assuming everyone uses the same fixed STAGE_ORDER.
+//
 // Usage:
 //   <OfficeDashboard currentUser={{ id, username, role }} />
 // ----------------------------------------------------------------------------
@@ -37,7 +43,21 @@ const STAGE_LABEL = {
   rejected: 'Rejected',
 };
 
-const STAGE_ORDER = ['officer', 'senior_officer', 'authorizer', 'approved'];
+const STAGE_SHORT_LABEL = {
+  officer: 'Officer',
+  senior_officer: 'Sr. Officer',
+  authorizer: 'Dept. Head',
+};
+
+const CLASS_LABELS = { normal: 'Normal', medium: 'Medium Restriction', strict: 'Strict / Secure' };
+
+// Fixed full chain for permission (add/edit/delete) requests. Download
+// requests instead use r.requiredStages, since that varies by security class.
+const PERMISSION_CHAIN = ['officer', 'senior_officer', 'authorizer'];
+
+function formatBirr(amount) {
+  return `ETB ${Number(amount || 0).toFixed(2)}`;
+}
 
 function OfficeDashboard({ currentUser }) {
   const [activeTab, setActiveTab] = useState('pending'); // 'pending' | 'history'
@@ -151,28 +171,31 @@ function OfficeDashboard({ currentUser }) {
 
   // --- Render helpers (React.createElement only, no JSX) ---
 
-  const renderPipelineDot = (stageName, requestStage) => {
-    const order = STAGE_ORDER;
-    const reqIdx = order.indexOf(requestStage === 'rejected' ? -1 : requestStage);
-    const thisIdx = order.indexOf(stageName);
-    let state = 'pending';
-    if (requestStage === 'rejected') state = 'rejected-context';
-    else if (thisIdx < reqIdx) state = 'done';
-    else if (thisIdx === reqIdx) state = 'current';
+  // chain: the actual stage sequence for THIS request (varies for
+  // downloads by security class; fixed for permission requests).
+  const renderPipeline = (r) => {
+    const chain = r.requestType === 'download' && r.requiredStages && r.requiredStages.length > 0
+      ? r.requiredStages
+      : PERMISSION_CHAIN;
+    const reqIdx = chain.indexOf(r.stage); // -1 once stage is 'approved' or 'rejected'
 
-    return h('span', { className: `od-pipe-dot od-pipe-dot--${state}`, key: stageName });
+    const children = [];
+    chain.forEach((stageName, i) => {
+      let state = 'pending';
+      if (r.stage === 'rejected') state = 'rejected-context';
+      else if (r.stage === 'approved') state = 'done';
+      else if (i < reqIdx) state = 'done';
+      else if (i === reqIdx) state = 'current';
+
+      children.push(h('span', { className: 'od-pipe-label', key: `label-${stageName}` }, STAGE_SHORT_LABEL[stageName] || stageName));
+      children.push(h('span', { className: `od-pipe-dot od-pipe-dot--${state}`, key: `dot-${stageName}` }));
+      if (i < chain.length - 1) {
+        children.push(h('span', { className: 'od-pipe-line', key: `line-${stageName}` }));
+      }
+    });
+
+    return h('div', { className: 'od-pipeline' }, ...children);
   };
-
-  const renderPipeline = (requestStage) => h('div', { className: 'od-pipeline' },
-    h('span', { className: 'od-pipe-label' }, 'Officer'),
-    renderPipelineDot('officer', requestStage),
-    h('span', { className: 'od-pipe-line' }),
-    renderPipelineDot('senior_officer', requestStage),
-    h('span', { className: 'od-pipe-label' }, 'Sr. Officer'),
-    h('span', { className: 'od-pipe-line' }),
-    renderPipelineDot('authorizer', requestStage),
-    h('span', { className: 'od-pipe-label' }, 'Dept. Head')
-  );
 
   const renderMakerInfo = (r) => h('div', { className: 'od-maker-card' },
     h('div', { className: 'od-maker-grid' },
@@ -190,6 +213,21 @@ function OfficeDashboard({ currentUser }) {
       )
     )
   );
+
+  // Fee/security-class context, shown only for download requests — this is
+  // what the reviewer actually needs to know when deciding whether to
+  // approve a paid download: what class it is and what it'll cost the
+  // requester once approved.
+  const renderDownloadContext = (r) => {
+    if (r.requestType !== 'download') return null;
+    return h('div', { className: 'od-download-context' },
+      h('span', { className: 'od-download-class' }, CLASS_LABELS[r.securityClass] || r.securityClass || 'Normal'),
+      r.totalFee != null && h('span', { className: 'od-download-fee' },
+        `${formatBirr(r.totalFee)} (${r.pageCount ?? '?'} pages @ ${formatBirr(r.feePerPage)}/page)`),
+      r.paymentStatus && h('span', { className: `od-download-payment od-download-payment--${r.paymentStatus}` },
+        r.paymentStatus === 'paid' ? 'Paid' : 'Unpaid')
+    );
+  };
 
   const renderRequestCard = (r, isHistory) => {
     const isRejecting = rejectingId === r.id;
@@ -212,7 +250,8 @@ function OfficeDashboard({ currentUser }) {
           ),
           isHistory ? h('span', { className: `od-stage-pill od-stage-pill--${r.stage}` }, STAGE_LABEL[r.stage]) : null
         ),
-        h('div', { className: 'od-request-target' }, r.targetLabel)
+        h('div', { className: 'od-request-target' }, r.targetLabel),
+        renderDownloadContext(r)
       ),
 
       renderMakerInfo(r),
@@ -222,7 +261,7 @@ function OfficeDashboard({ currentUser }) {
         h('p', { className: 'od-reason-text' }, r.reason)
       ),
 
-      !isHistory ? renderPipeline(r.stage) : null,
+      !isHistory ? renderPipeline(r) : null,
 
       (r.stage === 'rejected' && (r.officerRejectReason || r.seniorOfficerRejectReason || r.deptHeadRejectReason)) ?
         h('div', { className: 'od-rejection-note' },

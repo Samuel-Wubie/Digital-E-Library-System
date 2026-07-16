@@ -27,6 +27,15 @@ const STAGE_DEFS = [
   { key: "authorizer",     label: "Department Head (Step 3 — Final)" },
 ];
 
+// Fixed chain for permission requests. Download requests instead carry
+// their own r.requiredStages (varies by security class — see
+// chainForClass() in server.js), so the approval queue reads that per-row
+// instead of assuming this fixed chain applies to everyone.
+const PERMISSION_CHAIN = ["officer", "senior_officer", "authorizer"];
+
+const SECURITY_CLASSES = ["normal", "medium", "strict"];
+const CLASS_LABELS = { normal: "Normal", medium: "Medium Restriction", strict: "Strict / Secure" };
+
 const ROLE_COLORS = {
   User:             { bg: "bg-slate-100", text: "text-slate-700", dot: "bg-slate-400" },
   Officer:          { bg: "bg-blue-50",   text: "text-blue-700",  dot: "bg-blue-500"  },
@@ -39,6 +48,8 @@ const STAGE_COLORS = {
   senior_officer: { bg: "bg-violet-50", text: "text-violet-700", border: "border-violet-300" },
   authorizer:     { bg: "bg-emerald-50",text: "text-emerald-700",border: "border-emerald-300"},
 };
+
+const STAGE_SHORT_LABEL = { officer: "Officer", senior_officer: "Sr. Officer", authorizer: "Dept. Head" };
 
 const PERM_ICON = { view: Eye, edit: Pencil, delete: Trash2, download: Download };
 
@@ -56,6 +67,12 @@ const defaultResponsibility = {
   senior_officer: "Senior Officer",
   authorizer: "Department Head",
 };
+
+const defaultClassFees = { normal: 2, medium: 5, strict: 10 };
+
+function formatBirr(amount) {
+  return `ETB ${Number(amount || 0).toFixed(2)}`;
+}
 
 // Converts the array format the server stores/returns
 // ([{ stage, role }, ...]) into the stage-keyed object this component
@@ -97,12 +114,13 @@ function StatusPill({ status }) {
 
 function StageLabel({ stage }) {
   const map = {
-    checker:     { text: "Awaiting checker",    cls: "text-blue-700 bg-blue-50"    },
-    authorizer:  { text: "Awaiting authorizer", cls: "text-emerald-700 bg-emerald-50" },
-    approved:    { text: "Approved",            cls: "text-emerald-700 bg-emerald-50" },
-    rejected:    { text: "Rejected",            cls: "text-red-700 bg-red-50"      },
+    officer:        { text: "Awaiting officer",       cls: "text-blue-700 bg-blue-50"    },
+    senior_officer: { text: "Awaiting senior officer",cls: "text-violet-700 bg-violet-50" },
+    authorizer:     { text: "Awaiting authorizer",     cls: "text-emerald-700 bg-emerald-50" },
+    approved:       { text: "Approved",                cls: "text-emerald-700 bg-emerald-50" },
+    rejected:       { text: "Rejected",                cls: "text-red-700 bg-red-50"      },
   };
-  const m = map[stage] || map.checker;
+  const m = map[stage] || map.officer;
   return <span className={`inline-flex px-2.5 py-1 rounded-full text-xs font-medium ${m.cls}`}>{m.text}</span>;
 }
 
@@ -127,23 +145,29 @@ function StatCard({ icon: Icon, label, value, sub, accent, onClick }) {
   );
 }
 
-function ApprovalPipeline({ stage, checker, authorizer, requestedBy, size = "md" }) {
-  const stages = [
-    { key: "maker",      label: "Maker",      who: requestedBy },
-    { key: "checker",    label: "Checker",    who: checker     },
-    { key: "authorizer", label: "Authorizer", who: authorizer  },
-  ];
-  const order = ["maker", "checker", "authorizer", "approved"];
+// chain: explicit stage-key array for THIS request (fixed permission chain,
+// or a download's requiredStages). Previously this component had its own
+// internal 'maker'/'checker'/'authorizer' labels compared against an
+// 'order' array of the SAME wrong keys — but the stage prop passed in is
+// always the real DB value ('officer'/'senior_officer'/'authorizer'/
+// 'approved'/'rejected'), which never matched 'maker' or 'checker'. That
+// meant every request sitting at 'officer' or 'senior_officer' rendered as
+// all-pending regardless of actual progress. Fixed by keying strictly off
+// the real stage values passed in via `chain`.
+function ApprovalPipeline({ stage, chain, requestedBy, size = "md" }) {
+  const stages = (chain && chain.length > 0 ? chain : PERMISSION_CHAIN).map(key => ({
+    key, label: STAGE_SHORT_LABEL[key] || key,
+  }));
+  const idx = stages.findIndex(s => s.key === stage);
   const small = size === "sm";
 
   return (
     <div className="flex items-center gap-0">
       {stages.map((s, i) => {
         let state = "pending";
-        if (stage === "rejected")       { state = i === 0 ? "done" : i === 1 ? "rejected" : "pending"; }
-        else if (stage === "approved")  { state = "done"; }
-        else {
-          const idx = order.indexOf(stage);
+        if (stage === "rejected")      { state = i === 0 ? "done" : "rejected"; }
+        else if (stage === "approved") { state = "done"; }
+        else if (idx !== -1) {
           if (i < idx) state = "done";
           else if (i === idx) state = "active";
         }
@@ -164,13 +188,13 @@ function ApprovalPipeline({ stage, checker, authorizer, requestedBy, size = "md"
               </div>
               <div className={`text-center ${small ? "text-[10px]" : "text-xs"}`}>
                 <div className={`font-medium ${isActive ? "text-blue-700" : isDone ? "text-slate-700" : "text-slate-400"}`}>{s.label}</div>
-                {!small && s.who && <div className="text-slate-400 truncate max-w-[80px]">{s.who}</div>}
+                {!small && i === 0 && requestedBy && <div className="text-slate-400 truncate max-w-[80px]">by {requestedBy}</div>}
               </div>
             </div>
             {i < stages.length - 1 && (
               <div className={`h-0.5 flex-1 mb-5 ${small ? "max-w-[20px]" : "max-w-[32px]"} ${
                 (stage === "rejected" && i === 0) ? "bg-slate-200" :
-                order.indexOf(stage === "approved" ? "approved" : stage) > i || stage === "approved" ? "bg-slate-300" : "bg-slate-200"
+                (stage === "approved" || i < idx) ? "bg-slate-300" : "bg-slate-200"
               }`} />
             )}
           </React.Fragment>
@@ -270,13 +294,102 @@ function Overview({ currentUserId }) {
                 <div className="text-sm font-medium text-slate-800 truncate">{r.action} &middot; {r.target}</div>
                 <div className="text-xs text-slate-400">{r.requestCode || r.id} requested by {r.requestedBy}</div>
               </div>
-              <ApprovalPipeline stage={r.stage} checker={null} authorizer={null} requestedBy={r.requestedBy} size="sm" />
+              <ApprovalPipeline stage={r.stage} chain={PERMISSION_CHAIN} requestedBy={r.requestedBy} size="sm" />
             </div>
           ))}
         </div>
       </div>
 
       {openModal && <StatDetailModal kind={openModal} onClose={() => setOpenModal(null)} />}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Class Fees — admin-configurable per-page ETB rate for each security
+// class. Previously there was no UI for this at all; /api/settings/class-fees
+// could only be edited via a raw API call. class_fees drives what a user
+// pays per page in the UserDashboard download flow, and defaults to
+// { normal: 2, medium: 5, strict: 10 } server-side if never set.
+// ---------------------------------------------------------------------------
+function ClassFees({ currentUserId }) {
+  const [fees, setFees] = useState(defaultClassFees);
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  useEffect(() => {
+    fetch(`${API}/api/settings/class-fees`)
+      .then(r => r.json())
+      .then(data => { if (data) setFees({ ...defaultClassFees, ...data }); setLoading(false); })
+      .catch(() => setLoading(false));
+  }, []);
+
+  const handleChange = (cls, value) => {
+    setSaved(false);
+    setFees(prev => ({ ...prev, [cls]: value }));
+  };
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const normalized = {
+        normal: Number(fees.normal) || 0,
+        medium: Number(fees.medium) || 0,
+        strict: Number(fees.strict) || 0,
+      };
+      await fetch(`${API}/api/settings/class-fees`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fees: normalized, changedBy: currentUserId }),
+      });
+      setFees(normalized);
+      setSaved(true);
+    } catch (err) {
+      console.error("Failed to save class fees:", err);
+    }
+    setSaving(false);
+  };
+
+  if (loading) return <div className="text-sm text-slate-400 p-6">Loading fee schedule...</div>;
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-100">
+        <h3 className="text-sm font-semibold text-slate-900">Download fees per security class</h3>
+        <p className="text-xs text-slate-500 mt-0.5">
+          Per-page ETB rate charged when a user downloads a document. Normal-class documents skip
+          the approval chain entirely and go straight to payment; Medium and Strict require
+          approval first (2-step and 3-step respectively).
+        </p>
+      </div>
+      <div className="p-5 flex flex-col gap-4">
+        {SECURITY_CLASSES.map(cls => (
+          <div key={cls} className="flex items-center justify-between gap-4">
+            <div>
+              <div className="text-sm font-medium text-slate-800">{CLASS_LABELS[cls]}</div>
+              <div className="text-xs text-slate-400">Currently: {formatBirr(fees[cls])} / page</div>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs text-slate-400">ETB</span>
+              <input
+                type="number" min="0" step="0.5"
+                value={fees[cls]}
+                onChange={e => handleChange(cls, e.target.value)}
+                className="w-24 text-sm rounded-lg border border-slate-200 px-2.5 py-1.5 text-right focus:outline-none focus:ring-2 focus:ring-blue-200"
+              />
+              <span className="text-xs text-slate-400">/ page</span>
+            </div>
+          </div>
+        ))}
+        <div className="flex items-center gap-3 pt-2">
+          <button onClick={handleSave} disabled={saving}
+            className="px-4 py-2 rounded-lg text-xs font-medium bg-slate-900 text-white hover:bg-slate-800 disabled:opacity-50">
+            {saving ? "Saving..." : "Save fee schedule"}
+          </button>
+          {saved && <span className="text-xs text-emerald-600 font-medium">Saved.</span>}
+        </div>
+      </div>
     </div>
   );
 }
@@ -507,8 +620,10 @@ function UserManagement({ currentUserId }) {
 //
 // NOTE: server.js exposes /api/office-requests (not /api/approval-requests),
 // and stages are 'officer' | 'senior_officer' | 'authorizer' | 'approved' |
-// 'rejected' (not 'checker'/'authorizer' only). This mirrors OfficeDashboard.js,
-// which already targets the correct endpoints/stage names.
+// 'rejected'. This mirrors OfficeDashboard.js. Download-type rows also carry
+// securityClass/requiredStages/feePerPage/pageCount/totalFee/paymentStatus —
+// shown here so an approver knows what class/cost they're approving before
+// clicking Accept.
 // ---------------------------------------------------------------------------
 function ApprovalQueue({ currentUser }) {
   const [requests, setRequests] = useState([]);
@@ -576,13 +691,27 @@ function ApprovalQueue({ currentUser }) {
 
       <div className="flex flex-col gap-3">
         {list.length === 0 && <div className="text-center py-12 text-sm text-slate-400">Nothing here right now.</div>}
-        {list.map(r => (
+        {list.map(r => {
+          const isDownload = r.requestType === "download";
+          const chain = isDownload && r.requiredStages && r.requiredStages.length > 0 ? r.requiredStages : PERMISSION_CHAIN;
+          return (
           <div key={r.id} className="bg-white rounded-xl border border-slate-200 p-5">
             <div className="flex items-start justify-between gap-4 flex-wrap">
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 mb-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                   <span className="text-xs font-mono text-slate-400">{r.requestCode || r.id}</span>
                   <StageLabel stage={r.stage} />
+                  {isDownload && (
+                    <span className="inline-flex px-2.5 py-1 rounded-full text-xs font-medium bg-amber-50 text-amber-700">
+                      {CLASS_LABELS[r.securityClass] || r.securityClass || "Normal"}
+                    </span>
+                  )}
+                  {isDownload && r.totalFee != null && (
+                    <span className="text-xs text-slate-500">
+                      {formatBirr(r.totalFee)} ({r.pageCount ?? "?"} pages @ {formatBirr(r.feePerPage)}/page)
+                      {r.paymentStatus && ` · ${r.paymentStatus === "paid" ? "Paid" : "Unpaid"}`}
+                    </span>
+                  )}
                 </div>
                 <div className="text-sm font-medium text-slate-800">{r.action} &middot; {r.targetLabel}</div>
                 <div className="text-xs text-slate-500 mt-1">{r.reason}</div>
@@ -598,7 +727,7 @@ function ApprovalQueue({ currentUser }) {
                   </div>
                 )}
               </div>
-              <ApprovalPipeline stage={r.stage} checker={null} authorizer={null} requestedBy={r.makerUsername} />
+              <ApprovalPipeline stage={r.stage} chain={chain} requestedBy={r.makerUsername} />
             </div>
 
             {["officer", "senior_officer", "authorizer"].includes(r.stage) && (
@@ -606,7 +735,7 @@ function ApprovalQueue({ currentUser }) {
                 <button onClick={() => handleApprove(r.id)}
                   className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200 hover:bg-emerald-100">
                   <CheckCircle2 className="w-3.5 h-3.5" />
-                  {r.stage === "authorizer" ? "Authorize & finalize" : "Approve & forward"}
+                  {r.stage === chain[chain.length - 1] ? "Authorize & finalize" : "Approve & forward"}
                 </button>
                 {rejectingId === r.id ? (
                   <div className="flex items-center gap-2 flex-1">
@@ -628,7 +757,7 @@ function ApprovalQueue({ currentUser }) {
               </div>
             )}
           </div>
-        ))}
+        )})}
       </div>
     </div>
   );
@@ -752,6 +881,7 @@ const NAV = [
   { key: "library",   label: "Library",        icon: BookOpen      },
   { key: "overview",  label: "Overview",        icon: LayoutDashboard },
   { key: "access",    label: "Access control",  icon: ShieldCheck   },
+  { key: "fees",      label: "Download fees",   icon: Download      },
   { key: "users",     label: "Users",           icon: Users         },
   { key: "approvals", label: "Approval queue",  icon: ClipboardList },
   { key: "audit",     label: "Audit log",       icon: Activity      },
@@ -802,8 +932,10 @@ export default function AdminDashboard({ user, setUser }) {
         <div className="px-5 py-5 flex items-center gap-2.5 border-b border-white/10">
           <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center font-semibold text-sm">G</div>
           <div>
-            <div className="text-sm font-semibold leading-tight">GIE / EGI Admin</div>
-            <div className="text-[11px] text-slate-400 leading-tight">Management console</div>
+            <div className="text-sm font-semibold leading-tight">EGI Admin</div>
+            <div className="text-[11px] text-slate-400 leading-tight">Management dashboard
+              
+            </div>
           </div>
         </div>
         <nav className="flex-1 px-3 py-4 flex flex-col gap-1">
@@ -855,6 +987,7 @@ export default function AdminDashboard({ user, setUser }) {
           {active === "library"   && <LibraryDashboard user={user} setUser={setUser} />}
           {active === "overview"  && <Overview currentUserId={currentUser.id} />}
           {active === "access"    && <AccessControlMatrix matrix={matrix} setMatrix={setMatrix} responsibility={responsibility} setResponsibility={setResponsibility} currentUserId={currentUser.id} />}
+          {active === "fees"      && <ClassFees currentUserId={currentUser.id} />}
           {active === "users"     && <UserManagement currentUserId={currentUser.id} />}
           {active === "approvals" && <ApprovalQueue currentUser={currentUser} />}
           {active === "audit"     && <AuditLog />}

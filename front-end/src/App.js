@@ -6,6 +6,8 @@ import AdminDashboard from './components/admindashboard';
 import OfficeWorkspace from './components/OfficeWorkspace';
 import SignUp from './components/SignUp';
 import ForgotPassword from './components/ForgotPassword';
+import libraryImage from './images/liabrary.png';
+import gieLogo from './logo.png';
 
 const h = React.createElement;
 const API = "http://localhost:5000";
@@ -23,10 +25,8 @@ function routeForRole(role) {
 }
 
 // ----------------------------------------------------------------------------
-// Simple login form. Built fresh since no login screen existed yet in this
-// codebase — SignUp.js and ForgotPassword.js were already built as
-// standalone screens, but nothing rendered them or decided what to show
-// before/after them. This component is also React.createElement only.
+// Simple login form. Split-screen layout: left half is the library image,
+// right half holds the login card. React.createElement only.
 // ----------------------------------------------------------------------------
 function LoginScreen({ onLoginSuccess, onSwitchToSignup, onSwitchToForgotPassword }) {
   const [username, setUsername] = useState('');
@@ -67,53 +67,60 @@ function LoginScreen({ onLoginSuccess, onSwitchToSignup, onSwitchToForgotPasswor
   };
 
   return h('div', { className: 'login-page' },
-    h('div', { className: 'login-card' },
-      h('div', { className: 'login-header' },
-        h('div', { className: 'login-logo' }, 'G'),
-        h('h1', { className: 'login-title' }, 'GIE / EGI Library System'),
-        h('p', { className: 'login-subtitle' }, 'Sign in to continue')
-      ),
-
-      error ? h('div', { className: 'login-alert' }, error) : null,
-
-      h('form', { className: 'login-form', onSubmit: handleSubmit },
-        h('div', { className: 'login-field' },
-          h('label', { className: 'login-label', htmlFor: 'login-username' }, 'Username'),
-          h('input', {
-            id: 'login-username',
-            type: 'text',
-            className: 'login-input',
-            placeholder: 'Enter your username',
-            value: username,
-            onChange: (e) => setUsername(e.target.value)
-          })
+    // Left half — library image
+    h('div', { className: 'login-branding' },
+      h('img', { src: libraryImage, alt: 'Digital Library', className: 'login-branding-image' })
+    ),
+    // Right half — login form
+    h('div', { className: 'login-form-side' },
+      h('div', { className: 'login-card' },
+        h('div', { className: 'login-header' },
+          h('img', { src: gieLogo, alt: 'GIE Logo', className: 'login-logo' }),
+          h('h1', { className: 'login-title' }, ' EGI DigitalLibrary System'),
+          h('p', { className: 'login-subtitle' }, 'Sign in to continue')
         ),
-        h('div', { className: 'login-field' },
-          h('label', { className: 'login-label', htmlFor: 'login-password' }, 'Password'),
-          h('input', {
-            id: 'login-password',
-            type: 'password',
-            className: 'login-input',
-            placeholder: 'Enter your password',
-            value: password,
-            onChange: (e) => setPassword(e.target.value),
-            autoComplete: 'current-password'
-          })
-        ),
-        h('button', {
-          type: 'submit',
-          className: 'login-submit-btn',
-          disabled: loading
-        }, loading ? 'Signing in...' : 'Sign in')
-      ),
 
-      h('div', { className: 'login-footer' },
-        h('button', { type: 'button', className: 'login-link-btn', onClick: onSwitchToForgotPassword },
-          'Forgot password?'
+        error ? h('div', { className: 'login-alert' }, error) : null,
+
+        h('form', { className: 'login-form', onSubmit: handleSubmit },
+          h('div', { className: 'login-field' },
+            h('label', { className: 'login-label', htmlFor: 'login-username' }, 'Username'),
+            h('input', {
+              id: 'login-username',
+              type: 'text',
+              className: 'login-input',
+              placeholder: 'Enter your username',
+              value: username,
+              onChange: (e) => setUsername(e.target.value)
+            })
+          ),
+          h('div', { className: 'login-field' },
+            h('label', { className: 'login-label', htmlFor: 'login-password' }, 'Password'),
+            h('input', {
+              id: 'login-password',
+              type: 'password',
+              className: 'login-input',
+              placeholder: 'Enter your password',
+              value: password,
+              onChange: (e) => setPassword(e.target.value),
+              autoComplete: 'current-password'
+            })
+          ),
+          h('button', {
+            type: 'submit',
+            className: 'login-submit-btn',
+            disabled: loading
+          }, loading ? 'Signing in...' : 'Sign in')
         ),
-        h('span', { className: 'login-footer-divider' }, '\u00b7'),
-        h('button', { type: 'button', className: 'login-link-btn', onClick: onSwitchToSignup },
-          'Create an account'
+
+        h('div', { className: 'login-footer' },
+          h('button', { type: 'button', className: 'login-link-btn', onClick: onSwitchToForgotPassword },
+            'Forgot password?'
+          ),
+          h('span', { className: 'login-footer-divider' }, '\u00b7'),
+          h('button', { type: 'button', className: 'login-link-btn', onClick: onSwitchToSignup },
+            'Create an account'
+          )
         )
       )
     )
