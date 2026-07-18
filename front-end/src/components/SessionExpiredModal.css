@@ -1,0 +1,85 @@
+/* Session Expired dialog — centered over a dimmed screen, styled after
+   classic core-banking session dialogs. */
+
+.sem-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100000;
+}
+
+.sem-dialog {
+  width: min(560px, 92vw);
+  background: #f2f2f0;
+  border: 1px solid #7c8a8b;
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.35);
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+.sem-titlebar {
+  background: #4e6160;
+  color: #ffffff;
+  font-size: 0.95rem;
+  font-weight: 600;
+  padding: 0.55rem 0.9rem;
+}
+
+.sem-body {
+  padding: 1rem 1.2rem 1.1rem;
+}
+
+.sem-heading {
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: #1f2937;
+  margin-bottom: 0.9rem;
+}
+
+.sem-message {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.85rem;
+  color: #374151;
+  letter-spacing: 0.02em;
+  margin-bottom: 2.2rem;
+}
+
+.sem-icon {
+  width: 22px;
+  height: 22px;
+  flex-shrink: 0;
+  background: #f0c419;
+  color: #5b4a00;
+  border: 1px solid #c9a20e;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 800;
+  font-size: 0.85rem;
+}
+
+.sem-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
+.sem-btn {
+  min-width: 84px;
+  padding: 0.5rem 1rem;
+  background: #3e7b7d;
+  color: #ffffff;
+  border: 1px solid #2f5f61;
+  border-radius: 3px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.sem-btn:hover { background: #346a6c; }
+.sem-btn:active { background: #2b5a5c; }

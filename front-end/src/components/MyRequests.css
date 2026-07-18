@@ -1,0 +1,80 @@
+/* My Requests panel — the maker's view of their submitted requests. */
+
+.mr-root {
+  padding: 1.5rem;
+  max-width: 1100px;
+  margin: 0 auto;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, sans-serif;
+}
+
+.mr-header { margin-bottom: 1rem; }
+
+.mr-title {
+  margin: 0 0 0.2rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.mr-subtitle {
+  margin: 0;
+  font-size: 0.8rem;
+  color: #64748b;
+}
+
+.mr-empty {
+  padding: 1.4rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  font-size: 0.85rem;
+  color: #64748b;
+}
+
+.mr-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  overflow: hidden;
+  font-size: 0.83rem;
+}
+
+.mr-table th {
+  text-align: left;
+  padding: 0.65rem 0.9rem;
+  background: #f8fafc;
+  color: #64748b;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.mr-table td {
+  padding: 0.7rem 0.9rem;
+  border-bottom: 1px solid #f1f5f9;
+  color: #334155;
+  vertical-align: middle;
+}
+
+.mr-table tr:last-child td { border-bottom: none; }
+
+.mr-code { font-weight: 700; color: #0f172a; white-space: nowrap; }
+.mr-target { max-width: 320px; }
+.mr-date { white-space: nowrap; color: #64748b; }
+
+.mr-chip {
+  display: inline-block;
+  padding: 0.22rem 0.6rem;
+  border-radius: 999px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.mr-chip--pending  { background: #fef2f2; color: #dc2626; border: 1px solid #fecaca; }
+.mr-chip--accepted { background: #ecfdf5; color: #047857; border: 1px solid #a7f3d0; }
+.mr-chip--rejected { background: #f1f5f9; color: #475569; border: 1px solid #e2e8f0; }

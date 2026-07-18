@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import './App.css';
+import { useSessionManager } from './components/UseSessionManager';
+import SessionExpiredModal from './components/SessionExpiredModal';
 
 // Component Imports cleanly resolved to the components subfolder
 import AdminDashboard from './components/admindashboard';
 import OfficeWorkspace from './components/OfficeWorkspace';
+import UserWorkspace from './components/UserWorkspace';
 import SignUp from './components/SignUp';
 import ForgotPassword from './components/ForgotPassword';
 import libraryImage from './images/liabrary.png';
@@ -13,15 +16,21 @@ const h = React.createElement;
 const API = "http://localhost:5000";
 
 // ----------------------------------------------------------------------------
-// Roles that get the full admin console (AdminDashboard, which itself opens
-// on the Library tab first). Every other role is routed to the standalone
-// Office Dashboard reviewer screen instead — no admin sidebar, no
-// Users/Access control/Audit log tabs, per the integration requirement.
+// Role routing — each audience gets its own dashboard:
+//   admin / manager                          → full admin console
+//   User                                     → user workspace (library +
+//                                              my requests, no admin tabs)
+//   Officer / Senior Officer / Dept Head ... → office workspace (library +
+//                                              review queue + my requests)
 // ----------------------------------------------------------------------------
-const ADMIN_CONSOLE_ROLES = ['User', 'admin', 'manager'];
-
+// Comparison is case/whitespace-insensitive so 'admin', 'Admin', 'ADMIN',
+// 'Manager', etc. all land on the right dashboard regardless of how the
+// role string was typed when the account was created.
 function routeForRole(role) {
-  return ADMIN_CONSOLE_ROLES.includes(role) ? 'admin-console' : 'office-dashboard';
+  const r = String(role || '').trim().toLowerCase();
+  if (r === 'admin' || r === 'administrator' || r === 'manager') return 'admin-console';
+  if (r === 'user') return 'user-dashboard';
+  return 'office-dashboard'; // Officer, Senior Officer, Department Head
 }
 
 // ----------------------------------------------------------------------------
@@ -75,7 +84,7 @@ function LoginScreen({ onLoginSuccess, onSwitchToSignup, onSwitchToForgotPasswor
     h('div', { className: 'login-form-side' },
       h('div', { className: 'login-card' },
         h('div', { className: 'login-header' },
-          h('img', { src: gieLogo, alt: 'GIE Logo', className: 'login-logo' }),
+          h('img', { src: gieLogo, alt: 'Library logo', className: 'login-logo' }),
           h('h1', { className: 'login-title' }, ' EGI DigitalLibrary System'),
           h('p', { className: 'login-subtitle' }, 'Sign in to continue')
         ),
@@ -153,7 +162,21 @@ export default function App() {
     }
   }, []);
 
+  // Session management for ALL roles: idle auto-logout + heartbeat +
+  // admin force-logout, active whenever anyone is logged in. When the
+  // session ends, a centered "Session Expired" dialog is shown over the
+  // login screen (sessionExpired holds the reason: 'idle' | 'forced').
+  const [sessionExpired, setSessionExpired] = useState(null);
+  const handleSessionEnd = useCallback((reason) => {
+    setUser(null);
+    localStorage.removeItem('user');
+    setView('login');
+    setSessionExpired(reason || 'idle');
+  }, []);
+  useSessionManager(user, handleSessionEnd);
+
   const handleLoginSuccess = (loggedInUser) => {
+    setSessionExpired(null);
     setUser(loggedInUser);
     localStorage.setItem('user', JSON.stringify(loggedInUser));
     setView(routeForRole(loggedInUser.role));
@@ -189,18 +212,33 @@ export default function App() {
     });
   }
 
+  // Admin console: admin/manager only — they are not makers, so no bell.
   if (view === 'admin-console' && user) {
     return h(AdminDashboard, { user, setUser });
   }
 
+  // Office workspace mounts the bell inside its own tab bar, next to the
+  // "Office Dashboard Review" tab — no floating copy needed here.
   if (view === 'office-dashboard' && user) {
     return h(OfficeWorkspace, { user, setUser });
   }
 
-  // Default: login screen.
-  return h(LoginScreen, {
-    onLoginSuccess: handleLoginSuccess,
-    onSwitchToSignup: () => setView('signup'),
-    onSwitchToForgotPassword: () => setView('forgot-password')
-  });
+  // User workspace: library + My Requests, bell inline in its tab bar.
+  if (view === 'user-dashboard' && user) {
+    return h(UserWorkspace, { user, setUser });
+  }
+
+  // Default: login screen (with the Session Expired dialog on top when the
+  // previous session timed out or was ended by an administrator).
+  return h(React.Fragment, null,
+    sessionExpired && h(SessionExpiredModal, {
+      reason: sessionExpired,
+      onLogin: () => setSessionExpired(null)
+    }),
+    h(LoginScreen, {
+      onLoginSuccess: handleLoginSuccess,
+      onSwitchToSignup: () => setView('signup'),
+      onSwitchToForgotPassword: () => setView('forgot-password')
+    })
+  );
 }

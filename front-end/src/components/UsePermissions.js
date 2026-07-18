@@ -46,7 +46,11 @@ export function usePermissions(role) {
     if (!matrix || !role) return false;
     const rolePermissions = matrix[role];
     if (!rolePermissions) return false;
-    return !!rolePermissions[permission];
+    // The access matrix only stores view/edit/delete/download. "Add" is
+    // governed by the same permission as "edit" (see AccessControlMatrix),
+    // so map it here — otherwise canDo('add') always returns false.
+    const key = permission === 'add' ? 'edit' : permission;
+    return !!rolePermissions[key];
   };
 
   return { can, loading, matrix };

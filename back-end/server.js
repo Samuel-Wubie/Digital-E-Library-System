@@ -124,13 +124,13 @@ async function resolveChainRoles() {
   }
 }
 
-// How many approval steps a download needs before payment, based on the
-// document's security class. Admin-configurable roles for each stage still
-// come from resolveChainRoles(); this only decides the LENGTH of the chain.
+// Download approval flow: single maker → checker step for EVERY document.
+// The maker submits the request with a reason; the checker (officer stage —
+// role is admin-configurable via resolveChainRoles()) accepts it, and the
+// request lands on 'approved' immediately — it never goes to the senior
+// officer or authorizer. The maker can then pay and download.
 function chainForClass(securityClass) {
-  if (securityClass === 'strict') return ['officer', 'senior_officer', 'authorizer'];
-  if (securityClass === 'medium') return ['officer', 'senior_officer'];
-  return []; // 'normal' — no approval chain, payment only
+  return ['officer']; // one checker step, all security classes
 }
 
 // Reads the admin-configurable per-page fee for each security class.
@@ -292,9 +292,71 @@ app.post('/api/logout', async (req, res) => {
   }
 });
 
+// --- SESSION MANAGEMENT ---
+// Heartbeat: called periodically by every logged-in client (all roles).
+// Refreshes last_active_at; if the account was set 'Inactive' (force-logout
+// by an admin, or logged out elsewhere), tells the client to log out.
+app.post('/api/session/heartbeat', async (req, res) => {
+  const { userId } = req.body;
+  if (!userId) return res.status(400).json({ message: "userId is required" });
+  try {
+    const result = await pool.query(
+      "UPDATE users SET last_active_at = NOW() WHERE id = $1 RETURNING status",
+      [userId]
+    );
+    if (result.rows.length === 0) return res.json({ forceLogout: true });
+    res.json({ forceLogout: result.rows[0].status !== 'Active' });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// Active sessions: every user currently marked Active, newest activity first.
+app.get('/api/sessions/active', async (req, res) => {
+  try {
+    const result = await pool.query(
+      `SELECT id, username, full_name, role, department, last_active_at
+       FROM users
+       WHERE status = 'Active'
+       ORDER BY last_active_at DESC NULLS LAST`
+    );
+    res.json(result.rows);
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// Force logout: admin ends a user's session. The user's next heartbeat
+// (within ~60s) sees status != 'Active' and logs the client out.
+app.post('/api/sessions/force-logout', async (req, res) => {
+  const { userId, adminId } = req.body;
+  if (!userId) return res.status(400).json({ message: "userId is required" });
+  try {
+    const result = await pool.query(
+      "UPDATE users SET status = 'Inactive' WHERE id = $1 RETURNING id, username",
+      [userId]
+    );
+    if (result.rows.length === 0) return res.status(404).json({ message: "User not found" });
+    await writeAuditLog(adminId || null, 'Session terminated', `Admin force-logged-out ${result.rows[0].username}`, 'warning');
+    res.json({ success: true });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
 // --- PUBLIC SIGNUP ---
 app.post('/api/auth/signup', async (req, res) => {
-  const { fullName, username, email, password } = req.body;
+  // Accept either a single fullName, or the firstName/middleName/lastName
+  // trio the SignUp form sends, and compose full_name from the parts.
+  const { fullName: rawFullName, firstName, middleName, lastName, username, email, password } = req.body;
+  const fullName = (rawFullName && String(rawFullName).trim()) ||
+    [firstName, middleName, lastName]
+      .map(p => (p ? String(p).trim() : ''))
+      .filter(Boolean)
+      .join(' ');
   if (!fullName || !username || !password) {
     return res.status(400).json({ message: "Full name, username, and password are required" });
   }
@@ -928,14 +990,18 @@ app.put('/api/office-requests/:id/accept', async (req, res) => {
 
     if (nextStage === 'approved') {
       if (reqRow.request_type === 'download') {
-        // Approval does NOT unlock the file — payment is still required.
+        // Officer makers have payment pre-cleared — they can download right
+        // away. Regular users still pay first.
+        const alreadyCleared = reqRow.payment_status === 'paid';
         await writeNotification(
           reqRow.requested_by,
-          'Download request approved',
-          `${reqRow.request_code} — "${reqRow.target_label}" was approved. Pay ${reqRow.total_fee} to download it.`,
+          'Download request accepted',
+          alreadyCleared
+            ? `${reqRow.request_code} — all approvals are complete. You can now download "${reqRow.target_label}" by clicking Download again.`
+            : `${reqRow.request_code} — all approvals are complete. Pay ${reqRow.total_fee} ETB and you can download "${reqRow.target_label}".`,
           reqRow.id
         );
-        await writeAuditLog(reqRow.requested_by, 'Approved — Awaiting Payment', `${reqRow.request_code} approved, total fee: ${reqRow.total_fee}`, 'success');
+        await writeAuditLog(reqRow.requested_by, alreadyCleared ? 'Approved — Ready to Download' : 'Approved — Awaiting Payment', `${reqRow.request_code} approved, total fee: ${reqRow.total_fee}`, 'success');
       } else if (reqRow.request_type === 'permission') {
         const data = typeof reqRow.meta_context === 'string' ? JSON.parse(reqRow.meta_context) : reqRow.meta_context;
 
@@ -978,13 +1044,23 @@ app.put('/api/office-requests/:id/accept', async (req, res) => {
           await pool.query('DELETE FROM books WHERE id = $1', [reqRow.target_book_id]);
         }
         await writeAuditLog(reqRow.requested_by, 'Execution Complete', `Staging modification metrics updated successfully for action: ${reqRow.requested_permission}`, 'success');
-        await writeNotification(reqRow.requested_by, 'Request approved', `${reqRow.request_code} — "${reqRow.target_label}" was approved and applied.`, reqRow.id);
+        const doneMessages = {
+          add:    `${reqRow.request_code} — all approvals are complete. Your new record "${reqRow.target_label}" has been added to the library.`,
+          edit:   `${reqRow.request_code} — all approvals are complete. Your changes to "${reqRow.target_label}" have been applied.`,
+          delete: `${reqRow.request_code} — all approvals are complete. "${reqRow.target_label}" has been deleted.`,
+        };
+        await writeNotification(
+          reqRow.requested_by,
+          'Request accepted',
+          doneMessages[reqRow.requested_permission] || `${reqRow.request_code} — all approvals are complete. "${reqRow.target_label}" was approved and applied.`,
+          reqRow.id
+        );
       }
     } else {
       await writeNotification(
         reqRow.requested_by,
-        'Request forwarded',
-        `${reqRow.request_code} moved to the next reviewer (${STAGE_ROLE_LABELS[nextStage] || nextStage}).`,
+        'Request stage update',
+        `${reqRow.request_code} — "${reqRow.target_label}" passed the ${STAGE_ROLE_LABELS[reqRow.stage] || reqRow.stage} review and is now with the ${STAGE_ROLE_LABELS[nextStage] || nextStage}.`,
         reqRow.id
       );
     }
@@ -1031,7 +1107,9 @@ app.put('/api/office-requests/:id/reject', async (req, res) => {
 
     const result = await pool.query(updateQuery, [actingUserId, cleanReason, id]);
     await writeAuditLog(actingUserId, 'Office Request Rejected', `Request ${reqRow.request_code} rejected at stage '${reqRow.stage}': ${cleanReason}`, 'danger');
-    await writeNotification(reqRow.requested_by, 'Request rejected', `${reqRow.request_code} — "${reqRow.target_label}" was rejected: ${cleanReason}`, reqRow.id);
+    // The maker is told the outcome only — never the rejection reason
+    // (it stays in the audit log and the request record for reviewers).
+    await writeNotification(reqRow.requested_by, 'Request rejected', `${reqRow.request_code} — "${reqRow.target_label}" was not approved.`, reqRow.id);
 
     return res.json(result.rows[0]);
   } catch (err) {
@@ -1092,16 +1170,23 @@ app.post('/api/downloads/request', async (req, res) => {
     const maker = makerResult.rows[0];
 
     const securityClass = book.security_class || 'normal';
-    const chain = chainForClass(securityClass);
 
-    if (chain.length > 0 && (!reason || !reason.trim())) {
-      return res.status(400).json({ message: "A reason is required for medium and strict documents" });
+    // Officer makers route straight to the Senior Officer (checker) and pay
+    // nothing — one acceptance and they can download, never reaching the
+    // authorizer/Department Head. Regular Users route to the officer-stage
+    // checker and pay after acceptance. A reason is always required.
+    const chainRoles = await resolveChainRoles();
+    const isOfficerMaker = maker.role === chainRoles[0];
+    const chain = isOfficerMaker ? ['senior_officer'] : chainForClass(securityClass);
+
+    if (!reason || !reason.trim()) {
+      return res.status(400).json({ message: "A reason is required for download requests" });
     }
 
     const fees = await getClassFees();
-    const feePerPage = fees[securityClass];
+    const feePerPage = isOfficerMaker ? 0 : fees[securityClass];
     const pageCount = book.page_count || 12;
-    const totalFee = +(feePerPage * pageCount).toFixed(2);
+    const totalFee = isOfficerMaker ? 0 : +(feePerPage * pageCount).toFixed(2);
 
     const requestCode = await nextRequestCode();
     const initialStage = chain.length > 0 ? chain[0] : 'approved';
@@ -1111,12 +1196,13 @@ app.post('/api/downloads/request', async (req, res) => {
          (request_code, action, target_label, target_book_id, reason, stage, requested_by, request_type,
           maker_full_name, maker_username, security_class, required_stages, fee_per_page, page_count_snapshot,
           total_fee, payment_status, meta_context)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'download',$8,$9,$10,$11,$12,$13,$14,'unpaid',$15) RETURNING *`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'download',$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
       [
         requestCode, 'Download', `Download Document: ${book.title}`, book.id,
-        reason && reason.trim() ? reason.trim() : 'Standard document — no authorization required',
+        reason.trim(),
         initialStage, userId, maker.full_name, maker.username, securityClass, chain,
         feePerPage, pageCount, totalFee,
+        isOfficerMaker ? 'paid' : 'unpaid', // officers never pay — mark cleared so the file gate opens on acceptance
         JSON.stringify({ file_path: book.file_path })
       ]
     );
@@ -1193,6 +1279,41 @@ app.post('/api/payments/checkout', async (req, res) => {
   }
 });
 
+// --- STAFF DIRECT DOWNLOAD: payment applies to the 'User' role only. ---
+// Officers, Senior Officers, Department Heads, admin, and manager download
+// documents directly — no fee quote, no approval request, no checkout.
+// The role check is done server-side so a regular user can't skip payment
+// by calling this endpoint directly.
+app.get('/api/downloads/direct/:bookId', async (req, res) => {
+  const { bookId } = req.params;
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ message: "userId is required" });
+  try {
+    const userResult = await pool.query('SELECT id, username, role FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) return res.status(404).json({ message: "User not found" });
+    const requester = userResult.rows[0];
+    if (requester.role === 'User' || requester.role === 'Officer') {
+      return res.status(403).json({ message: "Your role must request checker acceptance before downloading" });
+    }
+
+    const bookResult = await pool.query('SELECT id, title, file_path FROM books WHERE id = $1', [bookId]);
+    if (bookResult.rows.length === 0) return res.status(404).json({ message: "Book not found" });
+    const book = bookResult.rows[0];
+    if (!book.file_path) return res.status(404).json({ message: "No file associated with this record" });
+
+    const absolutePath = path.join(uploadDir, book.file_path);
+    if (!fs.existsSync(absolutePath)) return res.status(404).json({ message: "File no longer exists on disk" });
+
+    await pool.query('UPDATE books SET download_count = download_count + 1 WHERE id = $1', [book.id]);
+    await writeAuditLog(userId, 'Downloaded', `${requester.username} (${requester.role}) downloaded "${book.title}" — staff, no fee`, 'info');
+
+    res.download(absolutePath);
+  } catch (err) {
+    console.error("Staff direct download failed:", err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
 // --- GATED FILE DOWNLOAD: only the maker, only after approval + payment ---
 app.get('/api/downloads/:requestId/file', async (req, res) => {
   const { requestId } = req.params;
@@ -1262,7 +1383,46 @@ app.put('/api/notifications/:id/read', async (req, res) => {
 // ============================================================================
 // 13. SERVER STARTUP
 // ============================================================================
+
+// Self-healing admin account: if no account in the database has an admin/
+// manager role, create (or repair) the built-in 'admin' account so the
+// admin console is always reachable.
+//   username: admin      password: Admin@1234
+// Change that password after first login.
+async function ensureAdminAccount() {
+  try {
+    const existing = await pool.query(
+      "SELECT id, username FROM users WHERE LOWER(TRIM(role)) IN ('admin', 'administrator', 'manager') LIMIT 1"
+    );
+    if (existing.rows.length > 0) {
+      console.log(`Admin console account present: ${existing.rows[0].username}`);
+      return;
+    }
+
+    const passwordHash = await bcrypt.hash('Admin@1234', BCRYPT_SALT_ROUNDS);
+    const named = await pool.query('SELECT id FROM users WHERE username = $1', ['admin']);
+    if (named.rows.length > 0) {
+      // An 'admin' username exists but with the wrong role — repair it.
+      await pool.query(
+        "UPDATE users SET role = 'admin', password_hash = $1, status = 'Active' WHERE username = 'admin'",
+        [passwordHash]
+      );
+      console.log("Repaired 'admin' account: role set to admin, password reset to Admin@1234");
+    } else {
+      await pool.query(
+        `INSERT INTO users (full_name, username, password_hash, role)
+         VALUES ('System Administrator', 'admin', $1, 'admin')`,
+        [passwordHash]
+      );
+      console.log("Created admin account — username: admin, password: Admin@1234");
+    }
+  } catch (err) {
+    console.error('ensureAdminAccount failed:', err.message);
+  }
+}
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server application successfully running on port ${PORT}`);
+  ensureAdminAccount();
 });

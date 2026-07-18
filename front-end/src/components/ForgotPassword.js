@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import './ForgotPassword.css';
+import libraryLogo from '../logo.png';
 
 const h = React.createElement;
 const API = "http://localhost:5000";
@@ -200,7 +201,7 @@ const ForgotPassword = ({ onResetSuccess, onSwitchToLogin }) => {
   return h('div', { className: 'fp-page' },
     h('div', { className: 'fp-card' },
       h('div', { className: 'fp-header' },
-        h('div', { className: 'fp-logo' }, 'G'),
+        h('img', { src: libraryLogo, alt: 'Library logo', className: 'fp-logo' }),
         h('h1', { className: 'fp-title' }, step === 'verify' ? 'Reset your password' : 'Choose a new password'),
         h('p', { className: 'fp-subtitle' },
           step === 'verify'

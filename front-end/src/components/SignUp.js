@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import './SignUp.css';
+import libraryLogo from '../logo.png';
 
 const h = React.createElement;
 const API = "http://localhost:5000";
@@ -112,7 +113,7 @@ const SignUp = ({ onSignupSuccess, onSwitchToLogin }) => {
   return h('div', { className: 'signup-page' },
     h('div', { className: 'signup-card' },
       h('div', { className: 'signup-header' },
-        h('div', { className: 'signup-logo' }, 'G'),
+        h('img', { src: libraryLogo, alt: 'Library logo', className: 'signup-logo' }),
         h('h1', { className: 'signup-title' }, 'Create your account'),
         h('p', { className: 'signup-subtitle' }, 'Sign up to access the GIE / EGI Library system')
       ),

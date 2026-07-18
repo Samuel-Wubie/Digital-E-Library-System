@@ -4,10 +4,11 @@ import {
   LayoutDashboard, Users, ShieldCheck, ClipboardList, FileText,
   Search, Bell, Check, X, Eye, Pencil, Trash2, Download,
   UserPlus, Activity, FileBarChart2, Clock,
-  AlertTriangle, CheckCircle2, XCircle, Filter, BookOpen
+  AlertTriangle, CheckCircle2, XCircle, Filter, BookOpen, MonitorSmartphone, LogOut
 } from "lucide-react";
 import LibraryDashboard from "./Dashboard";
 import StatDetailModal from "./StatDetailModal";
+import libraryLogo from '../logo.png';
 
 const API = "http://localhost:5000";
 
@@ -883,10 +884,126 @@ const NAV = [
   { key: "access",    label: "Access control",  icon: ShieldCheck   },
   { key: "fees",      label: "Download fees",   icon: Download      },
   { key: "users",     label: "Users",           icon: Users         },
+  { key: "sessions",  label: "Sessions",        icon: MonitorSmartphone },
   { key: "approvals", label: "Approval queue",  icon: ClipboardList },
   { key: "audit",     label: "Audit log",       icon: Activity      },
   { key: "documents", label: "Documents",       icon: FileText      },
 ];
+
+// ---------------------------------------------------------------------------
+// Session Management — live view of every logged-in user (all roles), with
+// idle time and a force-logout action. The client's heartbeat (see
+// UseSessionManager.js) keeps last_active_at fresh; force-logout flips the
+// user's status to Inactive, which their next heartbeat obeys.
+// ---------------------------------------------------------------------------
+function timeAgo(ts) {
+  if (!ts) return "—";
+  const secs = Math.max(0, Math.floor((Date.now() - new Date(ts).getTime()) / 1000));
+  if (secs < 60) return `${secs}s ago`;
+  const mins = Math.floor(secs / 60);
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ${mins % 60}m ago`;
+  return `${Math.floor(hrs / 24)}d ago`;
+}
+
+function SessionManagement({ currentUserId }) {
+  const [sessions, setSessions] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [busyId, setBusyId] = useState(null);
+
+  const fetchSessions = () => {
+    fetch(`${API}/api/sessions/active`)
+      .then(r => r.json())
+      .then(data => { setSessions(Array.isArray(data) ? data : []); setLoading(false); })
+      .catch(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchSessions();
+    const interval = setInterval(fetchSessions, 15000); // live refresh every 15s
+    return () => clearInterval(interval);
+  }, []);
+
+  const forceLogout = async (session) => {
+    if (!window.confirm(`End ${session.username}'s session? They will be logged out within a minute.`)) return;
+    setBusyId(session.id);
+    try {
+      await fetch(`${API}/api/sessions/force-logout`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: session.id, adminId: currentUserId }),
+      });
+      fetchSessions();
+    } catch (err) {
+      console.error("Force logout failed:", err);
+      alert("Failed to end the session. Please try again.");
+    }
+    setBusyId(null);
+  };
+
+  // A session is "live" if the heartbeat has been seen in the last 2 minutes.
+  const isLive = (s) => s.last_active_at && (Date.now() - new Date(s.last_active_at).getTime()) < 2 * 60 * 1000;
+
+  return (
+    <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+      <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+        <div>
+          <h2 className="text-sm font-semibold text-slate-900">Active sessions</h2>
+          <p className="text-xs text-slate-500 mt-0.5">Everyone currently signed in, any role. Sessions idle for 15 minutes are logged out automatically. Refreshes every 15s.</p>
+        </div>
+        <span className="text-xs font-medium text-slate-500">{sessions.length} active</span>
+      </div>
+      {loading ? (
+        <div className="p-6 text-sm text-slate-500">Loading sessions...</div>
+      ) : sessions.length === 0 ? (
+        <div className="p-6 text-sm text-slate-500">No one is currently signed in.</div>
+      ) : (
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="text-left text-xs text-slate-500 border-b border-slate-100">
+              <th className="px-5 py-2.5 font-medium">User</th>
+              <th className="px-5 py-2.5 font-medium">Role</th>
+              <th className="px-5 py-2.5 font-medium">Department</th>
+              <th className="px-5 py-2.5 font-medium">Last active</th>
+              <th className="px-5 py-2.5 font-medium">Status</th>
+              <th className="px-5 py-2.5 font-medium text-right">Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {sessions.map(s => (
+              <tr key={s.id} className="border-b border-slate-50 last:border-0">
+                <td className="px-5 py-3">
+                  <div className="font-medium text-slate-900">{s.full_name || s.username}</div>
+                  <div className="text-xs text-slate-500">@{s.username}{s.id === currentUserId ? " (you)" : ""}</div>
+                </td>
+                <td className="px-5 py-3 text-slate-600">{s.role}</td>
+                <td className="px-5 py-3 text-slate-600">{s.department || "—"}</td>
+                <td className="px-5 py-3 text-slate-600">{timeAgo(s.last_active_at)}</td>
+                <td className="px-5 py-3">
+                  <span className={`inline-flex items-center gap-1.5 text-xs font-medium px-2 py-0.5 rounded-full ${
+                    isLive(s) ? "bg-emerald-50 text-emerald-700" : "bg-amber-50 text-amber-700"}`}>
+                    <span className={`w-1.5 h-1.5 rounded-full ${isLive(s) ? "bg-emerald-500" : "bg-amber-500"}`} />
+                    {isLive(s) ? "Online" : "Idle"}
+                  </span>
+                </td>
+                <td className="px-5 py-3 text-right">
+                  {s.id !== currentUserId && (
+                    <button onClick={() => forceLogout(s)} disabled={busyId === s.id}
+                      className="inline-flex items-center gap-1.5 text-xs font-medium text-red-600 border border-red-200 rounded-lg px-2.5 py-1.5 hover:bg-red-50 disabled:opacity-50">
+                      <LogOut className="w-3.5 h-3.5" />
+                      {busyId === s.id ? "Ending..." : "Force logout"}
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+    </div>
+  );
+}
 
 export default function AdminDashboard({ user, setUser }) {
   const [active, setActive]           = useState("library");
@@ -930,7 +1047,7 @@ export default function AdminDashboard({ user, setUser }) {
     <div className="admin-dashboard-root flex min-h-screen bg-slate-50 font-sans">
       <aside className="w-60 bg-slate-900 text-white flex flex-col flex-shrink-0">
         <div className="px-5 py-5 flex items-center gap-2.5 border-b border-white/10">
-          <div className="w-8 h-8 rounded-lg bg-blue-500 flex items-center justify-center font-semibold text-sm">G</div>
+          <img src={libraryLogo} alt="Library logo" className="w-8 h-8 rounded-lg object-cover flex-shrink-0" />
           <div>
             <div className="text-sm font-semibold leading-tight">EGI Admin</div>
             <div className="text-[11px] text-slate-400 leading-tight">Management dashboard
@@ -989,6 +1106,7 @@ export default function AdminDashboard({ user, setUser }) {
           {active === "access"    && <AccessControlMatrix matrix={matrix} setMatrix={setMatrix} responsibility={responsibility} setResponsibility={setResponsibility} currentUserId={currentUser.id} />}
           {active === "fees"      && <ClassFees currentUserId={currentUser.id} />}
           {active === "users"     && <UserManagement currentUserId={currentUser.id} />}
+          {active === "sessions"  && <SessionManagement currentUserId={currentUser.id} />}
           {active === "approvals" && <ApprovalQueue currentUser={currentUser} />}
           {active === "audit"     && <AuditLog />}
           {active === "documents" && <Documents />}

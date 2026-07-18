@@ -40,13 +40,8 @@
   height: 48px;
   margin: 0 auto 1rem;
   border-radius: 12px;
-  background: linear-gradient(135deg, #3b82f6, #2563eb);
-  color: #ffffff;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 700;
-  font-size: 1.25rem;
+  object-fit: cover;
+  display: block;
   box-shadow: 0 4px 12px rgba(59, 130, 246, 0.35);
 }
 

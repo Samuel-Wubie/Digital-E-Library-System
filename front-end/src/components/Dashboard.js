@@ -294,7 +294,47 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
     if (!book.file_path) { alert('No file available for download.'); return; }
     if (!canDo('download')) { alert('Access Denied: Your role does not have permission to download.'); return; }
 
+    // Senior Officer, Department Head, admin and manager download directly.
+    // Officers are makers: they ask the Senior Officer (checker) with a
+    // reason and download free once accepted — never via the authorizer.
+    // Regular Users also go through a checker, then pay.
+    const isOfficerMaker = user?.role === 'Officer';
+    if (user?.role !== 'User' && !isOfficerMaker) {
+      window.open(`${API}/api/downloads/direct/${book.id}?userId=${user.id}`, '_blank', 'noopener');
+      return;
+    }
+
     try {
+      // Maker → checker flow: if this maker already has a request for this
+      // book, don't create a duplicate. If the checker accepted it, pay and
+      // download now; otherwise it's still waiting.
+      const mineRes = await fetch(`${API}/api/office-requests?makerId=${user.id}&requestType=download`);
+      const mine = await mineRes.json();
+      if (mineRes.ok && Array.isArray(mine)) {
+        const existing = mine.find(r => r.targetBookId === book.id && r.stage !== 'rejected' && !(r.stage === 'approved' && r.paymentStatus === 'paid' && !isOfficerMaker));
+        if (existing && existing.stage === 'approved' && isOfficerMaker) {
+          // Checker accepted — officers download free, no payment step.
+          window.open(`${API}/api/downloads/${existing.id}/file?userId=${user.id}`, '_blank', 'noopener');
+          return;
+        }
+        if (existing && existing.stage === 'approved') {
+          if (!window.confirm(`Your request ${existing.requestCode} was accepted by the checker.\nFee: ${existing.totalFee} ETB (${existing.pageCount} pages @ ${existing.feePerPage}/page).\n\nPay and download now?`)) return;
+          const payRes = await fetch(`${API}/api/payments/checkout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId: existing.id, userId: user.id }),
+          });
+          const payment = await payRes.json();
+          if (!payRes.ok) { alert(payment.message || 'Payment failed.'); return; }
+          window.open(`${API}${payment.downloadUrl}`, '_blank');
+          return;
+        }
+        if (existing) {
+          alert(`Your request ${existing.requestCode} is still waiting for the checker to accept it. Once accepted, click Download again to pay and download.`);
+          return;
+        }
+      }
+
       const initRes = await fetch(`${API}/api/downloads/initiate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -303,16 +343,10 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
       const quote = await initRes.json();
       if (!initRes.ok) { alert(quote.message || 'Could not get a download quote.'); return; }
 
-      const confirmMsg = quote.requiresApproval
-        ? `"${quote.title}" is classified ${quote.securityClass}. It needs ${quote.approvalChain.length}-step approval before payment.\nFee: ${quote.totalFee} ETB (${quote.pageCount} pages @ ${quote.feePerPage}/page).\n\nSubmit the request?`
-        : `"${quote.title}" — ${quote.totalFee} ETB (${quote.pageCount} pages @ ${quote.feePerPage}/page).\n\nPay and download now?`;
-      if (!window.confirm(confirmMsg)) return;
-
-      let reason = '';
-      if (quote.requiresApproval) {
-        reason = window.prompt('Enter your business reason for this download request:') || '';
-        if (!reason.trim()) return;
-      }
+      const reason = window.prompt(isOfficerMaker
+        ? `"${quote.title}" — your request will be sent to the Senior Officer (checker) for acceptance. No fee.\n\nEnter your reason for this download:`
+        : `"${quote.title}" — ${quote.totalFee} ETB (${quote.pageCount} pages @ ${quote.feePerPage}/page).\nYour request will be sent to the checker for acceptance.\n\nEnter your reason for this download:`) || '';
+      if (!reason.trim()) return;
 
       const reqRes = await fetch(`${API}/api/downloads/request`, {
         method: 'POST',
@@ -322,19 +356,9 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
       const request = await reqRes.json();
       if (!reqRes.ok) { alert(request.message || 'Could not submit the download request.'); return; }
 
-      if (request.stage === 'approved') {
-        // Normal-class documents land on 'approved' immediately — go straight to payment.
-        const payRes = await fetch(`${API}/api/payments/checkout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ requestId: request.id, userId: user.id }),
-        });
-        const payment = await payRes.json();
-        if (!payRes.ok) { alert(payment.message || 'Payment failed.'); return; }
-        window.open(`${API}${payment.downloadUrl}`, '_blank');
-      } else {
-        alert(`Request ${request.request_code} submitted for approval (${quote.securityClass}). You'll be notified once it's approved. Note: this app doesn't yet have a "pending downloads" screen to resume payment afterward — that's a follow-up piece someone still needs to build.`);
-      }
+      alert(isOfficerMaker
+        ? `Request ${request.request_code} sent to the Senior Officer with your reason. Once accepted, click Download again to download.`
+        : `Request ${request.request_code} sent to the checker with your reason. Once the checker accepts it, click Download again to pay and download.`);
     } catch (err) {
       console.error('Download flow failed:', err);
       alert('System error during the download flow.');
@@ -541,7 +565,43 @@ function OtherPublicationsPanel({ user, canAdd, canDelete, canDo }) {
     if (!f.file_path) { alert('No file available for download.'); return; }
     if (!canDo('download')) { alert('Access Denied: Your role does not have permission to download.'); return; }
 
+    // Same rules as the main library: Senior Officer and above download
+    // directly; Officers ask the Senior Officer (checker) and download free
+    // once accepted; Users ask a checker then pay.
+    const isOfficerMaker = user?.role === 'Officer';
+    if (user?.role !== 'User' && !isOfficerMaker) {
+      window.open(`${API}/api/downloads/direct/${f.id}?userId=${user.id}`, '_blank', 'noopener');
+      return;
+    }
+
     try {
+      // Same maker → checker flow as the main library downloads.
+      const mineRes = await fetch(`${API}/api/office-requests?makerId=${user.id}&requestType=download`);
+      const mine = await mineRes.json();
+      if (mineRes.ok && Array.isArray(mine)) {
+        const existing = mine.find(r => r.targetBookId === f.id && r.stage !== 'rejected' && !(r.stage === 'approved' && r.paymentStatus === 'paid' && !isOfficerMaker));
+        if (existing && existing.stage === 'approved' && isOfficerMaker) {
+          window.open(`${API}/api/downloads/${existing.id}/file?userId=${user.id}`, '_blank', 'noopener');
+          return;
+        }
+        if (existing && existing.stage === 'approved') {
+          if (!window.confirm(`Your request ${existing.requestCode} was accepted by the checker.\nFee: ${existing.totalFee} ETB (${existing.pageCount} pages @ ${existing.feePerPage}/page).\n\nPay and download now?`)) return;
+          const payRes = await fetch(`${API}/api/payments/checkout`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ requestId: existing.id, userId: user.id }),
+          });
+          const payment = await payRes.json();
+          if (!payRes.ok) { alert(payment.message || 'Payment failed.'); return; }
+          window.open(`${API}${payment.downloadUrl}`, '_blank');
+          return;
+        }
+        if (existing) {
+          alert(`Your request ${existing.requestCode} is still waiting for the checker to accept it. Once accepted, click Download again to pay and download.`);
+          return;
+        }
+      }
+
       const initRes = await fetch(`${API}/api/downloads/initiate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -550,16 +610,10 @@ function OtherPublicationsPanel({ user, canAdd, canDelete, canDo }) {
       const quote = await initRes.json();
       if (!initRes.ok) { alert(quote.message || 'Could not get a download quote.'); return; }
 
-      const confirmMsg = quote.requiresApproval
-        ? `"${quote.title}" is classified ${quote.securityClass}. It needs ${quote.approvalChain.length}-step approval before payment.\nFee: ${quote.totalFee} ETB (${quote.pageCount} pages @ ${quote.feePerPage}/page).\n\nSubmit the request?`
-        : `"${quote.title}" — ${quote.totalFee} ETB (${quote.pageCount} pages @ ${quote.feePerPage}/page).\n\nPay and download now?`;
-      if (!window.confirm(confirmMsg)) return;
-
-      let reason = '';
-      if (quote.requiresApproval) {
-        reason = window.prompt('Enter your business reason for this download request:') || '';
-        if (!reason.trim()) return;
-      }
+      const reason = window.prompt(isOfficerMaker
+        ? `"${quote.title}" — your request will be sent to the Senior Officer (checker) for acceptance. No fee.\n\nEnter your reason for this download:`
+        : `"${quote.title}" — ${quote.totalFee} ETB (${quote.pageCount} pages @ ${quote.feePerPage}/page).\nYour request will be sent to the checker for acceptance.\n\nEnter your reason for this download:`) || '';
+      if (!reason.trim()) return;
 
       const reqRes = await fetch(`${API}/api/downloads/request`, {
         method: 'POST',
@@ -569,18 +623,9 @@ function OtherPublicationsPanel({ user, canAdd, canDelete, canDo }) {
       const request = await reqRes.json();
       if (!reqRes.ok) { alert(request.message || 'Could not submit the download request.'); return; }
 
-      if (request.stage === 'approved') {
-        const payRes = await fetch(`${API}/api/payments/checkout`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ requestId: request.id, userId: user.id }),
-        });
-        const payment = await payRes.json();
-        if (!payRes.ok) { alert(payment.message || 'Payment failed.'); return; }
-        window.open(`${API}${payment.downloadUrl}`, '_blank');
-      } else {
-        alert(`Request ${request.request_code} submitted for approval (${quote.securityClass}). You'll be notified once it's approved.`);
-      }
+      alert(isOfficerMaker
+        ? `Request ${request.request_code} sent to the Senior Officer with your reason. Once accepted, click Download again to download.`
+        : `Request ${request.request_code} sent to the checker with your reason. Once the checker accepts it, click Download again to pay and download.`);
     } catch (err) {
       console.error('Download flow failed:', err);
       alert('System error during the download flow.');
