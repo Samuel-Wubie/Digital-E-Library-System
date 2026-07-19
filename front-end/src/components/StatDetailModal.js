@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import './StatDetailModal.css';
 
 const h = React.createElement;
-const API = "http://localhost:5000";
+import { API } from '../config';
 
 // ----------------------------------------------------------------------------
 // One shared modal component that renders three different list types

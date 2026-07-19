@@ -5,7 +5,7 @@ import FilterDropdown from './FilterDropdown';
 import { usePermissions } from './UsePermissions';
 
 const h = React.createElement;
-const API = "http://localhost:5000";
+import { API } from '../config';
 
 // ============================================================================
 // BACKEND CONTRACT — matches the real server.js exactly (verified against

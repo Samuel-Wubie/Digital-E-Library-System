@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './OfficeDashboard.css';
 import { usePermissions } from './UsePermissions';
+import { askSelect } from './dialogs';
 
 const h = React.createElement;
-const API = "http://localhost:5000";
+import { API } from '../config';
 
 // ----------------------------------------------------------------------------
 // Office Dashboard — the reviewer screen for Officers, Senior Officers, and
@@ -89,7 +90,14 @@ function OfficeDashboard({ currentUser }) {
     setError('');
     fetch(`${API}/api/office-requests?stage=${myStage}`)
       .then(res => res.json())
-      .then(data => { setPendingRequests(Array.isArray(data) ? data : []); setLoading(false); })
+      .then(data => {
+        // Only show requests addressed to ME (or to nobody in particular).
+        const mine = (Array.isArray(data) ? data : []).filter(r =>
+          !r.assignedReviewerId || String(r.assignedReviewerId) === String(currentUser.id)
+        );
+        setPendingRequests(mine);
+        setLoading(false);
+      })
       .catch(err => {
         console.error('Failed to load office requests:', err);
         setError('Could not load requests. Please try again.');
@@ -123,13 +131,49 @@ function OfficeDashboard({ currentUser }) {
     });
   }, [activeTab, myStage, currentUser]);
 
-  const handleAccept = async (requestId) => {
+  const handleAccept = async (r) => {
     setActionError('');
+
+    // If accepting forwards the request to another stage (not final),
+    // the reviewer must pick the specific person at the next stage —
+    // exactly like the maker did when submitting.
+    let nextReviewerId = null;
+    const chain = r.requestType === 'download' && r.requiredStages && r.requiredStages.length > 0
+      ? r.requiredStages
+      : PERMISSION_CHAIN;
+    const idx = chain.indexOf(r.stage);
+    const isFinal = idx === -1 || idx === chain.length - 1;
+
+    if (!isFinal) {
+      const nextStage = chain[idx + 1];
+      const fallbackRoles = { officer: 'Officer', senior_officer: 'Senior Officer', authorizer: 'Department Head' };
+      const nextRole = (r.config && r.config[nextStage]) || fallbackRoles[nextStage];
+      try {
+        const usersRes = await fetch(`${API}/api/users/by-role?role=${encodeURIComponent(nextRole)}`);
+        const users = await usersRes.json();
+        const options = (usersRes.ok && Array.isArray(users) ? users : [])
+          .filter(u => String(u.id) !== String(currentUser.id))
+          .map(u => ({ value: String(u.id), label: u.full_name ? `${u.full_name} (@${u.username})` : `@${u.username}` }));
+        if (options.length > 0) {
+          const picked = await askSelect({
+            title: 'Forward Request',
+            message: `${r.requestCode} — accept and forward to which ${nextRole}?`,
+            label: `Send to (${nextRole})`,
+            options,
+          });
+          if (!picked) return; // cancelled
+          nextReviewerId = picked;
+        }
+      } catch (err) {
+        console.error('Could not load next reviewers:', err);
+      }
+    }
+
     try {
-      const res = await fetch(`${API}/api/office-requests/${requestId}/accept`, {
+      const res = await fetch(`${API}/api/office-requests/${r.id}/accept`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ actingUserId: currentUser.id }),
+        body: JSON.stringify({ actingUserId: currentUser.id, nextReviewerId }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -278,7 +322,7 @@ function OfficeDashboard({ currentUser }) {
 
         h('button', {
           className: 'od-btn od-btn--accept',
-          onClick: () => handleAccept(r.id),
+          onClick: () => handleAccept(r),
           disabled: matrixDenied,
           title: matrixDenied ? 'Blocked by Access Control matrix' : undefined
         }, myStage === 'authorizer' ? 'Authorize' : 'Accept & forward'),

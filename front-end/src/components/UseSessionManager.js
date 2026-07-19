@@ -1,6 +1,6 @@
 import { useEffect, useRef, useCallback } from 'react';
 
-const API = "http://localhost:5000";
+import { API } from '../config';
 
 const IDLE_LIMIT_MS = 2 * 60 * 1000;    // auto-logout after 2 min of no activity
 const HEARTBEAT_MS  = 25 * 1000;        // tell the server we're alive every 25s

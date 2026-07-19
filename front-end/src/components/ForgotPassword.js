@@ -3,7 +3,7 @@ import './ForgotPassword.css';
 import libraryLogo from '../logo.png';
 
 const h = React.createElement;
-const API = "http://localhost:5000";
+import { API } from '../config';
 
 // Simplified in-app password reset — no email sending, no token, no expiry.
 // Step 1: verify the account by username (email optional extra check).

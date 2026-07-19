@@ -2,8 +2,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import './Dashboard.css';
 import './LibraryNav.css';
 import { usePermissions } from './UsePermissions';
+import { askReason, askConfirm, showAlert } from './dialogs';
 
-const API = 'http://localhost:5000';
+import { API } from '../config';
 const CURRENT_YEAR = new Date().getFullYear();
 const EARLIEST_YEAR = 1950; // adjust if older records exist in the archive
 
@@ -131,6 +132,25 @@ function buildQueryParams(paramsObj) {
   return qp;
 }
 
+// Which role reviews this maker's requests first:
+// User -> Officer, Officer -> Senior Officer, Senior Officer -> Department Head.
+function reviewerRoleForMaker(makerRole) {
+  if (makerRole === 'Officer') return 'Senior Officer';
+  if (makerRole === 'Senior Officer') return 'Department Head';
+  return 'Officer';
+}
+
+// Everyone holding that role, for the "send to a specific person" picker.
+async function fetchReviewers(role) {
+  try {
+    const res = await fetch(`${API}/api/users/by-role?role=${encodeURIComponent(role)}`);
+    const data = await res.json();
+    return res.ok && Array.isArray(data) ? data : [];
+  } catch (err) {
+    return [];
+  }
+}
+
 // ============================================================================
 // REUSABLE: 5-way filter row (author / title / department / location / year range)
 // ============================================================================
@@ -242,11 +262,20 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
 
   const handleRequestSubmission = async (actionType, targetLabel, contextPayload = {}, uploadedFile = null) => {
     if (!canDo(actionType)) {
-      alert(`Access Denied: Your role does not have permission to request a record ${actionType}.`);
+      showAlert(`Access Denied: Your role does not have permission to request a record ${actionType}.`);
       return false;
     }
-    const userReason = window.prompt(`Enter your business reason to initiate this ${actionType} request:`);
-    if (!userReason) return false;
+    const reviewerRole = reviewerRoleForMaker(user.role);
+    const reviewers = await fetchReviewers(reviewerRole);
+    const reasonResult = await askReason({
+      title: 'Authorization Request',
+      message: `ENTER YOUR BUSINESS REASON TO INITIATE THIS ${String(actionType).toUpperCase()} REQUEST.`,
+      reviewers,
+      reviewerLabel: `Send to (${reviewerRole})`,
+    });
+    if (!reasonResult) return false;
+    const userReason = typeof reasonResult === 'string' ? reasonResult : reasonResult.reason;
+    const assignedReviewerId = typeof reasonResult === 'string' ? null : reasonResult.reviewerId;
 
     const multiPartForm = new FormData();
     multiPartForm.append('makerId', user.id);
@@ -255,6 +284,7 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
     multiPartForm.append('requestedPermission', actionType);
     multiPartForm.append('targetLabel', targetLabel);
     multiPartForm.append('reason', userReason);
+    if (assignedReviewerId) multiPartForm.append('assignedReviewerId', assignedReviewerId);
 
     if (contextPayload.targetId) multiPartForm.append('targetBookId', contextPayload.targetId);
     else if (contextPayload.bookId) multiPartForm.append('targetBookId', contextPayload.bookId);
@@ -277,22 +307,22 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
     try {
       const res = await fetch(`${API}/api/office-requests`, { method: 'POST', body: multiPartForm });
       if (res.ok) {
-        alert('Workflow request initiated successfully! It has been routed to the approval chain.');
+        showAlert('Workflow request initiated successfully! It has been routed to the approval chain.');
         return true;
       }
       const errData = await res.json();
-      alert(`Pipeline error: ${errData.message}`);
+      showAlert(`Pipeline error: ${errData.message}`);
       return false;
     } catch (err) {
       console.error('Failed to generate workflow instance:', err);
-      alert('System error tracking the submission workflow instance.');
+      showAlert('System error tracking the submission workflow instance.');
       return false;
     }
   };
 
   const executeDownload = async (book) => {
-    if (!book.file_path) { alert('No file available for download.'); return; }
-    if (!canDo('download')) { alert('Access Denied: Your role does not have permission to download.'); return; }
+    if (!book.file_path) { showAlert('No file available for download.'); return; }
+    if (!canDo('download')) { showAlert('Access Denied: Your role does not have permission to download.'); return; }
 
     // Senior Officer, Department Head, admin and manager download directly.
     // Officers are makers: they ask the Senior Officer (checker) with a
@@ -318,19 +348,24 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
           return;
         }
         if (existing && existing.stage === 'approved') {
-          if (!window.confirm(`Your request ${existing.requestCode} was accepted by the checker.\nFee: ${existing.totalFee} ETB (${existing.pageCount} pages @ ${existing.feePerPage}/page).\n\nPay and download now?`)) return;
+          const payNow = await askConfirm({
+            title: 'Download Approved',
+            message: `YOUR REQUEST ${existing.requestCode} WAS ACCEPTED BY THE CHECKER.\nFee: ${existing.totalFee} ETB (${existing.pageCount} pages @ ${existing.feePerPage}/page).\n\nPay and download now?`,
+            okLabel: 'Pay & Download',
+          });
+          if (!payNow) return;
           const payRes = await fetch(`${API}/api/payments/checkout`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ requestId: existing.id, userId: user.id }),
           });
           const payment = await payRes.json();
-          if (!payRes.ok) { alert(payment.message || 'Payment failed.'); return; }
+          if (!payRes.ok) { showAlert(payment.message || 'Payment failed.'); return; }
           window.open(`${API}${payment.downloadUrl}`, '_blank');
           return;
         }
         if (existing) {
-          alert(`Your request ${existing.requestCode} is still waiting for the checker to accept it. Once accepted, click Download again to pay and download.`);
+          showAlert(`Your request ${existing.requestCode} is still waiting for the checker to accept it. Once accepted, click Download again to pay and download.`);
           return;
         }
       }
@@ -341,33 +376,42 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
         body: JSON.stringify({ bookId: book.id }),
       });
       const quote = await initRes.json();
-      if (!initRes.ok) { alert(quote.message || 'Could not get a download quote.'); return; }
+      if (!initRes.ok) { showAlert(quote.message || 'Could not get a download quote.'); return; }
 
-      const reason = window.prompt(isOfficerMaker
-        ? `"${quote.title}" — your request will be sent to the Senior Officer (checker) for acceptance. No fee.\n\nEnter your reason for this download:`
-        : `"${quote.title}" — ${quote.totalFee} ETB (${quote.pageCount} pages @ ${quote.feePerPage}/page).\nYour request will be sent to the checker for acceptance.\n\nEnter your reason for this download:`) || '';
-      if (!reason.trim()) return;
+      const reviewerRole = reviewerRoleForMaker(user.role);
+      const reviewers = await fetchReviewers(reviewerRole);
+      const reasonResult = await askReason({
+        title: 'Download Request',
+        message: isOfficerMaker
+          ? `"${quote.title}" — your request will be sent to the Senior Officer (checker) for acceptance. No fee. Enter your reason for this download.`
+          : `"${quote.title}" — ${quote.totalFee} ETB (${quote.pageCount} pages @ ${quote.feePerPage}/page). Your request will be sent to the checker for acceptance. Enter your reason for this download.`,
+        reviewers,
+        reviewerLabel: `Send to (${reviewerRole})`,
+      });
+      if (!reasonResult) return;
+      const reason = typeof reasonResult === 'string' ? reasonResult : reasonResult.reason;
+      const assignedReviewerId = typeof reasonResult === 'string' ? null : reasonResult.reviewerId;
 
       const reqRes = await fetch(`${API}/api/downloads/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookId: book.id, userId: user.id, reason }),
+        body: JSON.stringify({ bookId: book.id, userId: user.id, reason, assignedReviewerId }),
       });
       const request = await reqRes.json();
-      if (!reqRes.ok) { alert(request.message || 'Could not submit the download request.'); return; }
+      if (!reqRes.ok) { showAlert(request.message || 'Could not submit the download request.'); return; }
 
-      alert(isOfficerMaker
+      showAlert(isOfficerMaker
         ? `Request ${request.request_code} sent to the Senior Officer with your reason. Once accepted, click Download again to download.`
         : `Request ${request.request_code} sent to the checker with your reason. Once the checker accepts it, click Download again to pay and download.`);
     } catch (err) {
       console.error('Download flow failed:', err);
-      alert('System error during the download flow.');
+      showAlert('System error during the download flow.');
     }
   };
 
   const openViewPreview = (book) => {
     if (book.file_path) { setSelectedBook(book); setViewModal(true); }
-    else alert('No PDF associated with this record.');
+    else showAlert('No PDF associated with this record.');
   };
 
   const handleOpenAdd = () => {
@@ -522,9 +566,18 @@ function OtherPublicationsPanel({ user, canAdd, canDelete, canDo }) {
   useEffect(() => { fetchFiles(); }, [fetchFiles]);
 
   const submitRequest = async (actionType, targetLabel, contextPayload = {}, uploadedFile = null) => {
-    if (!canDo(actionType)) { alert(`Access Denied: Your role does not have permission to ${actionType}.`); return false; }
-    const userReason = window.prompt(`Enter your business reason to initiate this ${actionType} request:`);
-    if (!userReason) return false;
+    if (!canDo(actionType)) { showAlert(`Access Denied: Your role does not have permission to ${actionType}.`); return false; }
+    const reviewerRole = reviewerRoleForMaker(user.role);
+    const reviewers = await fetchReviewers(reviewerRole);
+    const reasonResult = await askReason({
+      title: 'Authorization Request',
+      message: `ENTER YOUR BUSINESS REASON TO INITIATE THIS ${String(actionType).toUpperCase()} REQUEST.`,
+      reviewers,
+      reviewerLabel: `Send to (${reviewerRole})`,
+    });
+    if (!reasonResult) return false;
+    const userReason = typeof reasonResult === 'string' ? reasonResult : reasonResult.reason;
+    const assignedReviewerId = typeof reasonResult === 'string' ? null : reasonResult.reviewerId;
 
     const form = new FormData();
     form.append('makerId', user.id);
@@ -533,19 +586,20 @@ function OtherPublicationsPanel({ user, canAdd, canDelete, canDo }) {
     form.append('requestedPermission', actionType);
     form.append('targetLabel', targetLabel);
     form.append('reason', userReason);
+    if (assignedReviewerId) form.append('assignedReviewerId', assignedReviewerId);
     if (contextPayload.targetId) form.append('targetBookId', contextPayload.targetId);
     form.append('metaContext', JSON.stringify({ ...contextPayload, category: 'other_publication' }));
     if (uploadedFile) form.append('pdfFile', uploadedFile);
 
     try {
       const res = await fetch(`${API}/api/office-requests`, { method: 'POST', body: form });
-      if (res.ok) { alert('Request submitted to the approval chain.'); return true; }
+      if (res.ok) { showAlert('Request submitted to the approval chain.'); return true; }
       const errData = await res.json();
-      alert(`Pipeline error: ${errData.message}`);
+      showAlert(`Pipeline error: ${errData.message}`);
       return false;
     } catch (err) {
       console.error(err);
-      alert('System error submitting the request.');
+      showAlert('System error submitting the request.');
       return false;
     }
   };
@@ -562,8 +616,8 @@ function OtherPublicationsPanel({ user, canAdd, canDelete, canDo }) {
   };
 
   const handleDownload = async (f) => {
-    if (!f.file_path) { alert('No file available for download.'); return; }
-    if (!canDo('download')) { alert('Access Denied: Your role does not have permission to download.'); return; }
+    if (!f.file_path) { showAlert('No file available for download.'); return; }
+    if (!canDo('download')) { showAlert('Access Denied: Your role does not have permission to download.'); return; }
 
     // Same rules as the main library: Senior Officer and above download
     // directly; Officers ask the Senior Officer (checker) and download free
@@ -585,19 +639,24 @@ function OtherPublicationsPanel({ user, canAdd, canDelete, canDo }) {
           return;
         }
         if (existing && existing.stage === 'approved') {
-          if (!window.confirm(`Your request ${existing.requestCode} was accepted by the checker.\nFee: ${existing.totalFee} ETB (${existing.pageCount} pages @ ${existing.feePerPage}/page).\n\nPay and download now?`)) return;
+          const payNow = await askConfirm({
+            title: 'Download Approved',
+            message: `YOUR REQUEST ${existing.requestCode} WAS ACCEPTED BY THE CHECKER.\nFee: ${existing.totalFee} ETB (${existing.pageCount} pages @ ${existing.feePerPage}/page).\n\nPay and download now?`,
+            okLabel: 'Pay & Download',
+          });
+          if (!payNow) return;
           const payRes = await fetch(`${API}/api/payments/checkout`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({ requestId: existing.id, userId: user.id }),
           });
           const payment = await payRes.json();
-          if (!payRes.ok) { alert(payment.message || 'Payment failed.'); return; }
+          if (!payRes.ok) { showAlert(payment.message || 'Payment failed.'); return; }
           window.open(`${API}${payment.downloadUrl}`, '_blank');
           return;
         }
         if (existing) {
-          alert(`Your request ${existing.requestCode} is still waiting for the checker to accept it. Once accepted, click Download again to pay and download.`);
+          showAlert(`Your request ${existing.requestCode} is still waiting for the checker to accept it. Once accepted, click Download again to pay and download.`);
           return;
         }
       }
@@ -608,27 +667,36 @@ function OtherPublicationsPanel({ user, canAdd, canDelete, canDo }) {
         body: JSON.stringify({ bookId: f.id }),
       });
       const quote = await initRes.json();
-      if (!initRes.ok) { alert(quote.message || 'Could not get a download quote.'); return; }
+      if (!initRes.ok) { showAlert(quote.message || 'Could not get a download quote.'); return; }
 
-      const reason = window.prompt(isOfficerMaker
-        ? `"${quote.title}" — your request will be sent to the Senior Officer (checker) for acceptance. No fee.\n\nEnter your reason for this download:`
-        : `"${quote.title}" — ${quote.totalFee} ETB (${quote.pageCount} pages @ ${quote.feePerPage}/page).\nYour request will be sent to the checker for acceptance.\n\nEnter your reason for this download:`) || '';
-      if (!reason.trim()) return;
+      const reviewerRole = reviewerRoleForMaker(user.role);
+      const reviewers = await fetchReviewers(reviewerRole);
+      const reasonResult = await askReason({
+        title: 'Download Request',
+        message: isOfficerMaker
+          ? `"${quote.title}" — your request will be sent to the Senior Officer (checker) for acceptance. No fee. Enter your reason for this download.`
+          : `"${quote.title}" — ${quote.totalFee} ETB (${quote.pageCount} pages @ ${quote.feePerPage}/page). Your request will be sent to the checker for acceptance. Enter your reason for this download.`,
+        reviewers,
+        reviewerLabel: `Send to (${reviewerRole})`,
+      });
+      if (!reasonResult) return;
+      const reason = typeof reasonResult === 'string' ? reasonResult : reasonResult.reason;
+      const assignedReviewerId = typeof reasonResult === 'string' ? null : reasonResult.reviewerId;
 
       const reqRes = await fetch(`${API}/api/downloads/request`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookId: f.id, userId: user.id, reason }),
+        body: JSON.stringify({ bookId: f.id, userId: user.id, reason, assignedReviewerId }),
       });
       const request = await reqRes.json();
-      if (!reqRes.ok) { alert(request.message || 'Could not submit the download request.'); return; }
+      if (!reqRes.ok) { showAlert(request.message || 'Could not submit the download request.'); return; }
 
-      alert(isOfficerMaker
+      showAlert(isOfficerMaker
         ? `Request ${request.request_code} sent to the Senior Officer with your reason. Once accepted, click Download again to download.`
         : `Request ${request.request_code} sent to the checker with your reason. Once the checker accepts it, click Download again to pay and download.`);
     } catch (err) {
       console.error('Download flow failed:', err);
-      alert('System error during the download flow.');
+      showAlert('System error during the download flow.');
     }
   };
 

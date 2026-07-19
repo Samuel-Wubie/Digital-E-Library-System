@@ -7,7 +7,7 @@ import MyRequests, { PENDING_STAGES } from './MyRequests';
 import libraryLogo from '../logo.png';
 
 const h = React.createElement;
-const API = "http://localhost:5000";
+import { API } from '../config';
 
 const ROLE_TO_STAGE = {
   'Officer': 'officer',
@@ -37,7 +37,10 @@ function OfficeWorkspace({ user, setUser }) {
         fetch(`${API}/api/office-requests?stage=${myStage}`)
           .then(r => r.json())
           .then(data => setReviewCount(
-            (Array.isArray(data) ? data : []).filter(r => String(r.makerId) !== String(user.id)).length
+            (Array.isArray(data) ? data : []).filter(r =>
+              String(r.makerId) !== String(user.id) &&
+              (!r.assignedReviewerId || String(r.assignedReviewerId) === String(user.id))
+            ).length
           ))
           .catch(() => {});
       }

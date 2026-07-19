@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import './MyRequests.css';
 
-const API = "http://localhost:5000";
+import { API } from '../config';
 
 const STAGE_LABELS = {
   officer: 'Officer',

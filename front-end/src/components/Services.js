@@ -3,7 +3,7 @@ import './SignUp.css';
 import libraryLogo from '../logo.png';
 
 const h = React.createElement;
-const API = "http://localhost:5000";
+import { API } from '../config';
 
 // Public self-registration page. Anyone can reach this without logging in.
 // The role is always forced to 'User' server-side — this form never sends

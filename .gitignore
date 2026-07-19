@@ -1,0 +1,15 @@
+# Dependencies
+node_modules/
+
+# Environment files — never commit database passwords or secrets
+.env
+*.env
+!.env.example
+
+# Build output
+front-end/build/
+front-end/dist/
+
+# OS junk
+.DS_Store
+Thumbs.db

@@ -1,0 +1,77 @@
+/* Extras for the reason/confirm dialogs (built on SessionExpiredModal.css). */
+
+.dlg-message {
+  margin-bottom: 1rem;
+  align-items: flex-start;
+}
+
+.dlg-message .sem-icon {
+  margin-top: 1px;
+}
+
+.dlg-message-text {
+  white-space: pre-line; /* keep line breaks in fee summaries */
+}
+
+.dlg-field {
+  margin-bottom: 0.9rem;
+}
+
+.dlg-label {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #374151;
+  margin-bottom: 0.3rem;
+}
+
+.dlg-select {
+  width: 100%;
+  padding: 0.55rem 0.7rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: #1f2937;
+  background: #ffffff;
+  border: 1px solid #9aa8a9;
+  border-radius: 3px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.dlg-select:focus {
+  border-color: #3e7b7d;
+  box-shadow: 0 0 0 3px rgba(62, 123, 125, 0.18);
+}
+
+.dlg-textarea {
+  width: 100%;
+  resize: vertical;
+  min-height: 90px;
+  padding: 0.6rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.85rem;
+  color: #1f2937;
+  background: #ffffff;
+  border: 1px solid #9aa8a9;
+  border-radius: 3px;
+  outline: none;
+  margin-bottom: 1.2rem;
+  box-sizing: border-box;
+}
+
+.dlg-textarea:focus {
+  border-color: #3e7b7d;
+  box-shadow: 0 0 0 3px rgba(62, 123, 125, 0.18);
+}
+
+.sem-btn--secondary {
+  background: #8ba3a4;
+  border-color: #74898a;
+}
+
+.sem-btn--secondary:hover { background: #7d9697; }
+
+.sem-btn:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+}

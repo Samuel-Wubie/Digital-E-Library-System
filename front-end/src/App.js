@@ -13,7 +13,7 @@ import libraryImage from './images/liabrary.png';
 import gieLogo from './logo.png';
 
 const h = React.createElement;
-const API = "http://localhost:5000";
+import { API } from './config';
 
 // ----------------------------------------------------------------------------
 // Role routing — each audience gets its own dashboard:
@@ -40,6 +40,7 @@ function routeForRole(role) {
 function LoginScreen({ onLoginSuccess, onSwitchToSignup, onSwitchToForgotPassword }) {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -76,16 +77,21 @@ function LoginScreen({ onLoginSuccess, onSwitchToSignup, onSwitchToForgotPasswor
   };
 
   return h('div', { className: 'login-page' },
-    // Left half — library image
+    // Left half — library image with welcome overlay
     h('div', { className: 'login-branding' },
-      h('img', { src: libraryImage, alt: 'Digital Library', className: 'login-branding-image' })
+      h('img', { src: libraryImage, alt: 'Digital Library', className: 'login-branding-image' }),
+      h('div', { className: 'login-branding-overlay' },
+        h('h2', { className: 'login-branding-title' }, 'EGI Digital Library'),
+        h('p', { className: 'login-branding-text' },
+          'Technical reports, maps and publications — searchable, secure, and all in one place.')
+      )
     ),
     // Right half — login form
     h('div', { className: 'login-form-side' },
       h('div', { className: 'login-card' },
         h('div', { className: 'login-header' },
           h('img', { src: gieLogo, alt: 'Library logo', className: 'login-logo' }),
-          h('h1', { className: 'login-title' }, ' EGI DigitalLibrary System'),
+          h('h1', { className: 'login-title' }, 'EGI Digital Library System'),
           h('p', { className: 'login-subtitle' }, 'Sign in to continue')
         ),
 
@@ -105,15 +111,23 @@ function LoginScreen({ onLoginSuccess, onSwitchToSignup, onSwitchToForgotPasswor
           ),
           h('div', { className: 'login-field' },
             h('label', { className: 'login-label', htmlFor: 'login-password' }, 'Password'),
-            h('input', {
-              id: 'login-password',
-              type: 'password',
-              className: 'login-input',
-              placeholder: 'Enter your password',
-              value: password,
-              onChange: (e) => setPassword(e.target.value),
-              autoComplete: 'current-password'
-            })
+            h('div', { className: 'login-password-wrap' },
+              h('input', {
+                id: 'login-password',
+                type: showPassword ? 'text' : 'password',
+                className: 'login-input',
+                placeholder: 'Enter your password',
+                value: password,
+                onChange: (e) => setPassword(e.target.value),
+                autoComplete: 'current-password'
+              }),
+              h('button', {
+                type: 'button',
+                className: 'login-password-toggle',
+                onClick: () => setShowPassword(s => !s),
+                title: showPassword ? 'Hide password' : 'Show password'
+              }, showPassword ? 'Hide' : 'Show')
+            )
           ),
           h('button', {
             type: 'submit',

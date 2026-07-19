@@ -9,8 +9,9 @@ import {
 import LibraryDashboard from "./Dashboard";
 import StatDetailModal from "./StatDetailModal";
 import libraryLogo from '../logo.png';
+import { showAlert } from './dialogs';
 
-const API = "http://localhost:5000";
+import { API } from '../config';
 
 // ---------------------------------------------------------------------------
 // Static config
@@ -69,7 +70,14 @@ const defaultResponsibility = {
   authorizer: "Department Head",
 };
 
-const defaultClassFees = { normal: 2, medium: 5, strict: 10 };
+// Download fees are keyed by document CATEGORY, not security class.
+const FEE_CATEGORIES = ["technical_report", "map", "other_publication"];
+const FEE_CATEGORY_LABELS = {
+  technical_report: "Technical Reports",
+  map: "Maps",
+  other_publication: "Other Publications",
+};
+const defaultCategoryFees = { technical_report: 2, map: 5, other_publication: 2 };
 
 function formatBirr(amount) {
   return `ETB ${Number(amount || 0).toFixed(2)}`;
@@ -307,39 +315,39 @@ function Overview({ currentUserId }) {
 }
 
 // ---------------------------------------------------------------------------
-// Class Fees — admin-configurable per-page ETB rate for each security
-// class. Previously there was no UI for this at all; /api/settings/class-fees
-// could only be edited via a raw API call. class_fees drives what a user
-// pays per page in the UserDashboard download flow, and defaults to
-// { normal: 2, medium: 5, strict: 10 } server-side if never set.
+// Category Fees — admin-configurable per-page ETB rate for each document
+// CATEGORY: Technical Reports, Maps, Other Publications. The security
+// class (normal/medium/strict) no longer sets the price — it only governs
+// approval requirements. Server defaults to
+// { technical_report: 2, map: 5, other_publication: 2 } if never saved.
 // ---------------------------------------------------------------------------
 function ClassFees({ currentUserId }) {
-  const [fees, setFees] = useState(defaultClassFees);
+  const [fees, setFees] = useState(defaultCategoryFees);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
 
   useEffect(() => {
-    fetch(`${API}/api/settings/class-fees`)
+    fetch(`${API}/api/settings/category-fees`)
       .then(r => r.json())
-      .then(data => { if (data) setFees({ ...defaultClassFees, ...data }); setLoading(false); })
+      .then(data => { if (data) setFees({ ...defaultCategoryFees, ...data }); setLoading(false); })
       .catch(() => setLoading(false));
   }, []);
 
-  const handleChange = (cls, value) => {
+  const handleChange = (cat, value) => {
     setSaved(false);
-    setFees(prev => ({ ...prev, [cls]: value }));
+    setFees(prev => ({ ...prev, [cat]: value }));
   };
 
   const handleSave = async () => {
     setSaving(true);
     try {
       const normalized = {
-        normal: Number(fees.normal) || 0,
-        medium: Number(fees.medium) || 0,
-        strict: Number(fees.strict) || 0,
+        technical_report: Number(fees.technical_report) || 0,
+        map: Number(fees.map) || 0,
+        other_publication: Number(fees.other_publication) || 0,
       };
-      await fetch(`${API}/api/settings/class-fees`, {
+      await fetch(`${API}/api/settings/category-fees`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ fees: normalized, changedBy: currentUserId }),
@@ -347,7 +355,7 @@ function ClassFees({ currentUserId }) {
       setFees(normalized);
       setSaved(true);
     } catch (err) {
-      console.error("Failed to save class fees:", err);
+      console.error("Failed to save category fees:", err);
     }
     setSaving(false);
   };
@@ -357,18 +365,18 @@ function ClassFees({ currentUserId }) {
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
       <div className="px-5 py-4 border-b border-slate-100">
-        <h3 className="text-sm font-semibold text-slate-900">Download fees per security class</h3>
+        <h3 className="text-sm font-semibold text-slate-900">Download fees per document category</h3>
         <p className="text-xs text-slate-500 mt-0.5">
-          Per-page ETB rate charged when a user downloads a document. Normal-class documents skip
-          the approval chain entirely and go straight to payment; Medium and Strict require
-          approval first (2-step and 3-step respectively).
+          Per-page ETB rate charged when a user downloads a document, based on what kind of
+          document it is — Technical Reports, Maps, or Other Publications. Security class
+          still controls the approval requirement, but not the price.
         </p>
       </div>
       <div className="p-5 flex flex-col gap-4">
-        {SECURITY_CLASSES.map(cls => (
+        {FEE_CATEGORIES.map(cls => (
           <div key={cls} className="flex items-center justify-between gap-4">
             <div>
-              <div className="text-sm font-medium text-slate-800">{CLASS_LABELS[cls]}</div>
+              <div className="text-sm font-medium text-slate-800">{FEE_CATEGORY_LABELS[cls]}</div>
               <div className="text-xs text-slate-400">Currently: {formatBirr(fees[cls])} / page</div>
             </div>
             <div className="flex items-center gap-1.5">
@@ -650,7 +658,7 @@ function ApprovalQueue({ currentUser }) {
       });
       if (!res.ok) {
         const err = await res.json();
-        alert(err.message);
+        showAlert(err.message);
         return;
       }
       fetchRequests();
@@ -937,7 +945,7 @@ function SessionManagement({ currentUserId }) {
       fetchSessions();
     } catch (err) {
       console.error("Force logout failed:", err);
-      alert("Failed to end the session. Please try again.");
+      showAlert("Failed to end the session. Please try again.");
     }
     setBusyId(null);
   };

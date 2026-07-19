@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 
-const API = "http://localhost:5000";
+import { API } from '../config';
 
 // Fallback matrix used only if the backend has never had a matrix saved yet
 // (e.g. brand new install, admin hasn't visited Access Control once). Once

@@ -14,10 +14,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Standardized on 'uploades' directory to match environment configurations
-const uploadDir = path.join(__dirname, 'uploades');
+// Standardized on 'uploades' directory to match environment configurations.
+// In production set UPLOAD_DIR to a persistent disk (e.g. a Railway Volume
+// mounted at /data/uploades) — the default local folder is wiped on every
+// cloud redeploy.
+const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, 'uploades');
 if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir);
+  fs.mkdirSync(uploadDir, { recursive: true });
 }
 
 const storage = multer.diskStorage({
@@ -133,23 +136,34 @@ function chainForClass(securityClass) {
   return ['officer']; // one checker step, all security classes
 }
 
-// Reads the admin-configurable per-page fee for each security class.
-async function getClassFees() {
-  const fallback = { normal: 2, medium: 5, strict: 10 };
+// Reads the admin-configurable per-page fee for each document CATEGORY —
+// Technical Reports, Maps, Other Publications. Fees are keyed by the
+// book's category, NOT by its security class (the class only decides
+// whether approval is needed, not the price).
+const FEE_CATEGORIES = ['technical_report', 'map', 'other_publication'];
+
+async function getCategoryFees() {
+  const fallback = { technical_report: 2, map: 5, other_publication: 2 };
   try {
-    const res = await pool.query("SELECT config_data FROM system_settings WHERE setting_key = 'class_fees'");
+    const res = await pool.query("SELECT config_data FROM system_settings WHERE setting_key = 'category_fees'");
     if (res.rows.length === 0) return fallback;
     const data = res.rows[0].config_data;
     const parsed = typeof data === 'string' ? JSON.parse(data) : data;
     return {
-      normal: Number(parsed.normal) || fallback.normal,
-      medium: Number(parsed.medium) || fallback.medium,
-      strict: Number(parsed.strict) || fallback.strict,
+      technical_report: Number(parsed.technical_report) || fallback.technical_report,
+      map: Number(parsed.map) || fallback.map,
+      other_publication: Number(parsed.other_publication) || fallback.other_publication,
     };
   } catch (err) {
-    console.error('Failed to load class fees, using default:', err.message);
+    console.error('Failed to load category fees, using default:', err.message);
     return fallback;
   }
+}
+
+// Fee for one book: match its category, defaulting unknown/legacy rows to
+// the technical-report rate.
+function feeForCategory(fees, category) {
+  return fees[FEE_CATEGORIES.includes(category) ? category : 'technical_report'];
 }
 
 // ============================================================================
@@ -286,6 +300,22 @@ app.post('/api/logout', async (req, res) => {
     }
     await writeAuditLog(userId, 'Logout', `${result.rows[0].username} signed out`, 'info');
     res.json({ message: "Logged out" });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// --- USERS BY ROLE (for the "send to a specific reviewer" picker) ---
+app.get('/api/users/by-role', async (req, res) => {
+  const { role } = req.query;
+  if (!role) return res.status(400).json({ message: "role is required" });
+  try {
+    const result = await pool.query(
+      'SELECT id, username, full_name, role FROM users WHERE role = $1 ORDER BY username',
+      [role]
+    );
+    res.json(result.rows);
   } catch (err) {
     console.error(err.message);
     res.status(500).send("Server Error");
@@ -748,10 +778,11 @@ app.put('/api/permissions', async (req, res) => {
   }
 });
 
-// --- PER-PAGE FEES FOR EACH DOCUMENT SECURITY CLASS ---
-app.get('/api/settings/class-fees', async (req, res) => {
+// --- PER-PAGE FEES FOR EACH DOCUMENT CATEGORY ---
+// (technical reports / maps / other publications)
+app.get('/api/settings/category-fees', async (req, res) => {
   try {
-    const fees = await getClassFees();
+    const fees = await getCategoryFees();
     res.json(fees);
   } catch (err) {
     console.error(err.message);
@@ -759,26 +790,26 @@ app.get('/api/settings/class-fees', async (req, res) => {
   }
 });
 
-app.put('/api/settings/class-fees', async (req, res) => {
+app.put('/api/settings/category-fees', async (req, res) => {
   const { fees, changedBy } = req.body;
   if (!fees || typeof fees !== 'object') {
     return res.status(400).json({ message: "fees object is required" });
   }
   const normalized = {
-    normal: Number(fees.normal) || 0,
-    medium: Number(fees.medium) || 0,
-    strict: Number(fees.strict) || 0,
+    technical_report: Number(fees.technical_report) || 0,
+    map: Number(fees.map) || 0,
+    other_publication: Number(fees.other_publication) || 0,
   };
   try {
     await pool.query(
       `INSERT INTO system_settings (setting_key, config_data, updated_at)
-       VALUES ('class_fees', $1, NOW())
+       VALUES ('category_fees', $1, NOW())
        ON CONFLICT (setting_key) DO UPDATE SET config_data = $1, updated_at = NOW()`,
       [JSON.stringify(normalized)]
     );
     await writeAuditLog(
-      changedBy, 'Class Fees Updated',
-      `Per-page fees set — Normal: ${normalized.normal}, Medium: ${normalized.medium}, Strict: ${normalized.strict}`,
+      changedBy, 'Category Fees Updated',
+      `Per-page fees set — Technical Reports: ${normalized.technical_report}, Maps: ${normalized.map}, Other Publications: ${normalized.other_publication}`,
       'warning'
     );
     res.json({ success: true, fees: normalized });
@@ -808,7 +839,7 @@ app.get('/api/office-requests/my-stage', async (req, res) => {
 
 // --- SUBMIT PERMISSION CHANGE (add/edit/delete a record) — always the full 3-step chain ---
 app.post('/api/office-requests', upload.single('pdfFile'), async (req, res) => {
-  const { makerId, requestType, requestedPermission, targetLabel, targetBookId, reason, metaContext } = req.body;
+  const { makerId, requestType, requestedPermission, targetLabel, targetBookId, reason, metaContext, assignedReviewerId } = req.body;
 
   if (!makerId || !requestType || !targetLabel || !reason) {
     return res.status(400).json({ message: "makerId, requestType, targetLabel, and reason are required" });
@@ -845,8 +876,8 @@ app.post('/api/office-requests', upload.single('pdfFile'), async (req, res) => {
 
     const result = await pool.query(
       `INSERT INTO approval_requests
-         (request_code, action, target_label, target_book_id, reason, stage, requested_by, request_type, requested_permission, maker_full_name, maker_username, meta_context)
-       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12) RETURNING *`,
+         (request_code, action, target_label, target_book_id, reason, stage, requested_by, request_type, requested_permission, maker_full_name, maker_username, meta_context, assigned_reviewer_id)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13) RETURNING *`,
       [
         requestCode,
         action,
@@ -859,7 +890,8 @@ app.post('/api/office-requests', upload.single('pdfFile'), async (req, res) => {
         requestedPermission || null,
         maker.full_name,
         maker.username,
-        JSON.stringify(contextPayload)
+        JSON.stringify(contextPayload),
+        assignedReviewerId ? parseInt(assignedReviewerId) : null
       ]
     );
 
@@ -901,6 +933,7 @@ app.get('/api/office-requests', async (req, res) => {
         ar.payment_status AS "paymentStatus",
         ar.maker_full_name AS "makerFullName", ar.maker_username AS "makerUsername", ar.requested_by AS "makerId", maker.role AS "makerRole",
         ar.officer_id AS "officerId", ar.checker_id AS "seniorOfficerId", ar.authorizer_id AS "deptHeadId",
+        ar.assigned_reviewer_id AS "assignedReviewerId",
         ar.meta_context AS "metaContext",
         ar.officer_reject_reason AS "officerRejectReason", ar.senior_officer_reject_reason AS "seniorOfficerRejectReason", ar.dept_head_reject_reason AS "deptHeadRejectReason",
         TO_CHAR(ar.created_at, 'FMDD Mon, HH24:MI') AS created
@@ -942,7 +975,7 @@ app.get('/api/office-requests', async (req, res) => {
 // --- requests and the variable-length download chain) ---
 app.put('/api/office-requests/:id/accept', async (req, res) => {
   const { id } = req.params;
-  const { actingUserId } = req.body;
+  const { actingUserId, nextReviewerId } = req.body;
   if (!actingUserId) return res.status(400).json({ message: "actingUserId is required" });
 
   try {
@@ -971,6 +1004,11 @@ app.put('/api/office-requests/:id/accept', async (req, res) => {
     if (actingUserRole !== expectedRoleForStage) {
       return res.status(403).json({ message: `Role clearance matrix mismatch. Expected: ${expectedRoleForStage}` });
     }
+    // If the maker addressed this request to a specific person, only that
+    // person can accept it.
+    if (reqRow.assigned_reviewer_id && String(reqRow.assigned_reviewer_id) !== String(actingUserId)) {
+      return res.status(403).json({ message: "This request was sent to a specific reviewer — only they can act on it." });
+    }
 
     const currentIdx = chain.indexOf(reqRow.stage);
     const isFinalStep = currentIdx === chain.length - 1;
@@ -981,9 +1019,15 @@ app.put('/api/office-requests/:id/accept', async (req, res) => {
     else if (reqRow.stage === 'senior_officer') idColumn = 'checker_id';
     else idColumn = 'authorizer_id';
 
+    // Forwarding assignment: when moving to the next stage the accepting
+    // reviewer picks the specific next person; once approved (final), the
+    // assignment is cleared.
+    const nextAssignee = nextStage === 'approved'
+      ? null
+      : (nextReviewerId ? parseInt(nextReviewerId) : null);
     const result = await pool.query(
-      `UPDATE approval_requests SET stage = $1, ${idColumn} = $2, updated_at = NOW() WHERE id = $3 RETURNING *`,
-      [nextStage, actingUserId, id]
+      `UPDATE approval_requests SET stage = $1, ${idColumn} = $2, assigned_reviewer_id = $3, updated_at = NOW() WHERE id = $4 RETURNING *`,
+      [nextStage, actingUserId, nextAssignee, id]
     );
     const roleLabel = STAGE_ROLE_LABELS[reqRow.stage];
     await writeAuditLog(actingUserId, `Office Chain: ${roleLabel} Verified`, `Request ${reqRow.request_code} advanced from '${reqRow.stage}' to '${nextStage}'`, 'info');
@@ -1127,13 +1171,13 @@ app.post('/api/downloads/initiate', async (req, res) => {
   const { bookId } = req.body;
   if (!bookId) return res.status(400).json({ message: "bookId is required" });
   try {
-    const bookResult = await pool.query('SELECT id, title, page_count, security_class FROM books WHERE id = $1', [bookId]);
+    const bookResult = await pool.query('SELECT id, title, page_count, security_class, category FROM books WHERE id = $1', [bookId]);
     if (bookResult.rows.length === 0) return res.status(404).json({ message: "Book not found" });
     const book = bookResult.rows[0];
 
-    const fees = await getClassFees();
+    const fees = await getCategoryFees();
     const securityClass = book.security_class || 'normal';
-    const feePerPage = fees[securityClass];
+    const feePerPage = feeForCategory(fees, book.category);
     const pageCount = book.page_count || 12;
     const totalFee = +(feePerPage * pageCount).toFixed(2);
     const approvalChain = chainForClass(securityClass);
@@ -1157,7 +1201,7 @@ app.post('/api/downloads/initiate', async (req, res) => {
 // --- SUBMIT A DOWNLOAD REQUEST (normal docs land straight on 'approved';
 //   --- medium/strict start their approval chain) ---
 app.post('/api/downloads/request', async (req, res) => {
-  const { bookId, userId, reason } = req.body;
+  const { bookId, userId, reason, assignedReviewerId } = req.body;
   if (!bookId || !userId) return res.status(400).json({ message: "bookId and userId are required" });
 
   try {
@@ -1183,8 +1227,8 @@ app.post('/api/downloads/request', async (req, res) => {
       return res.status(400).json({ message: "A reason is required for download requests" });
     }
 
-    const fees = await getClassFees();
-    const feePerPage = isOfficerMaker ? 0 : fees[securityClass];
+    const fees = await getCategoryFees();
+    const feePerPage = isOfficerMaker ? 0 : feeForCategory(fees, book.category);
     const pageCount = book.page_count || 12;
     const totalFee = isOfficerMaker ? 0 : +(feePerPage * pageCount).toFixed(2);
 
@@ -1195,15 +1239,16 @@ app.post('/api/downloads/request', async (req, res) => {
       `INSERT INTO approval_requests
          (request_code, action, target_label, target_book_id, reason, stage, requested_by, request_type,
           maker_full_name, maker_username, security_class, required_stages, fee_per_page, page_count_snapshot,
-          total_fee, payment_status, meta_context)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,'download',$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
+          total_fee, payment_status, meta_context, assigned_reviewer_id)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,'download',$8,$9,$10,$11,$12,$13,$14,$15,$16,$17) RETURNING *`,
       [
         requestCode, 'Download', `Download Document: ${book.title}`, book.id,
         reason.trim(),
         initialStage, userId, maker.full_name, maker.username, securityClass, chain,
         feePerPage, pageCount, totalFee,
         isOfficerMaker ? 'paid' : 'unpaid', // officers never pay — mark cleared so the file gate opens on acceptance
-        JSON.stringify({ file_path: book.file_path })
+        JSON.stringify({ file_path: book.file_path }),
+        assignedReviewerId ? parseInt(assignedReviewerId) : null
       ]
     );
 
@@ -1421,8 +1466,18 @@ async function ensureAdminAccount() {
   }
 }
 
+// Lightweight self-migration: columns added after the original schema.
+async function ensureSchemaUpgrades() {
+  try {
+    await pool.query('ALTER TABLE approval_requests ADD COLUMN IF NOT EXISTS assigned_reviewer_id INTEGER');
+  } catch (err) {
+    console.error('Schema upgrade failed:', err.message);
+  }
+}
+
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
   console.log(`Server application successfully running on port ${PORT}`);
+  ensureSchemaUpgrades();
   ensureAdminAccount();
 });

@@ -2,7 +2,7 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import './NotificationBar.css';
 
 const h = React.createElement;
-const API = "http://localhost:5000";
+import { API } from '../config';
 
 // Roles that submit requests (makers) and therefore get the notification
 // bar. Department Head is the final authorizer — never a maker — and

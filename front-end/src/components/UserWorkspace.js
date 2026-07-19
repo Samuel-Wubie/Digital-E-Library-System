@@ -6,7 +6,7 @@ import MyRequests, { PENDING_STAGES } from './MyRequests';
 import libraryLogo from '../logo.png';
 
 const h = React.createElement;
-const API = "http://localhost:5000";
+import { API } from '../config';
 
 // ----------------------------------------------------------------------------
 // UserWorkspace — admin-console-style vertical sidebar for the plain 'User'
