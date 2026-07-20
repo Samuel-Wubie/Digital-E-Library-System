@@ -1,13 +1,18 @@
 const { Pool } = require("pg");
 require("dotenv").config();
 
-// On Railway (and most cloud hosts) a single DATABASE_URL is provided and
-// SSL is required. Locally we keep using the individual DB_* variables
-// from .env with no SSL.
-const pool = process.env.DATABASE_URL
+// On most cloud hosts a single DATABASE_URL is provided. SSL is required
+// for public/proxy addresses, but Railway's PRIVATE network address
+// (postgres.railway.internal) does NOT support SSL — enabling it there
+// makes every query fail. So: SSL only for non-internal hosts.
+// Locally we keep using the individual DB_* variables from .env, no SSL.
+const connectionString = process.env.DATABASE_URL;
+const useSSL = connectionString && !connectionString.includes('railway.internal');
+
+const pool = connectionString
   ? new Pool({
-      connectionString: process.env.DATABASE_URL,
-      ssl: { rejectUnauthorized: false },
+      connectionString,
+      ssl: useSSL ? { rejectUnauthorized: false } : false,
     })
   : new Pool({
       user: process.env.DB_USER,
