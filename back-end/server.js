@@ -4,7 +4,10 @@ const { Pool } = require('pg');
 const path = require('path');
 const multer = require('multer');
 const fs = require('fs');
-const bcrypt = require('bcrypt');
+// bcryptjs (pure JavaScript) instead of native bcrypt — the native module
+// can crash on cloud hosts (Railway) even when the rest of the app runs.
+// Same API, and hashes created by either library verify with both.
+const bcrypt = require('bcryptjs');
 
 const app = express();
 
