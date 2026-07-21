@@ -9,6 +9,15 @@ require("dotenv").config();
 const connectionString = process.env.DATABASE_URL;
 const useSSL = connectionString && !connectionString.includes('railway.internal');
 
+// Diagnostic: prove what this running container actually sees, with the
+// password masked. If this prints "NOT SET", Railway isn't handing the
+// variable to this process at all and the problem is on the Railway side,
+// not in this code.
+console.log(
+  'DATABASE_URL seen by app:',
+  connectionString ? connectionString.replace(/:[^:@/]+@/, ':****@') : 'NOT SET'
+);
+
 const pool = connectionString
   ? new Pool({
       connectionString,
