@@ -17,6 +17,7 @@ console.log(
   'DATABASE_URL seen by app:',
   connectionString ? connectionString.replace(/:[^:@/]+@/, ':****@') : 'NOT SET'
 );
+console.log('Deploy check:', new Date().toISOString());
 
 const pool = connectionString
   ? new Pool({
