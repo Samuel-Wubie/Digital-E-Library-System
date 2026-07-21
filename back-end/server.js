@@ -39,13 +39,11 @@ const upload = multer({ storage });
 // ============================================================================
 // 2. DATABASE CONFIGURATION
 // ============================================================================
-const pool = new Pool({
-  user: 'postgres',
-  host: 'localhost',
-  database: 'library_db',
-  password: 'Samiwubie@7092',
-  port: 5432,
-});
+// Shared pool from db.js — uses DATABASE_URL when present (Railway), falling
+// back to local DB_* variables for local development. Previously this file
+// created its own separate hardcoded pool pointed at localhost, which is why
+// production always failed even when DATABASE_URL was set correctly.
+const pool = require('./db');
 
 const BCRYPT_SALT_ROUNDS = 10;
 
