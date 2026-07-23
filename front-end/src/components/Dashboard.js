@@ -106,15 +106,21 @@ const MAP_FORMATS = [
 
 const MAP_TYPES = [
   { key: 'geological', label: 'Geological Maps', hasScale: true },
-  { key: 'hydrogeological', label: 'Hydrogeological Maps', hasScale: false },
-  { key: 'hydrochemical', label: 'Hydrochemical Maps', hasScale: false },
+  { key: 'hydrogeological', label: 'Hydrogeological Maps', hasScale: true },
+  { key: 'hydrochemical', label: 'Hydrochemical Maps', hasScale: true },
   { key: 'engineering_geological', label: 'Engineering Geological Maps', hasScale: true },
-  { key: 'topo', label: 'Topo Maps', hasScale: false },
+  { key: 'topo', label: 'Topo Maps', hasScale: true },
 ];
 
+// Same scale list for every map type.
+const COMMON_MAP_SCALES = ['1:25,000', '1:50,000', '1:100,000', '1:200,000', '1:250,000', '1:500,000', '1:1,000,000', '1:2,000,000'];
+
 const SCALES_BY_MAP_TYPE = {
-  geological: ['1:50,000', '1:100,000', '1:250,000', '1:500,000', '1:1,000,000', '1:2,000,000'],
-  engineering_geological: ['1:50,000', '1:250,000'],
+  geological: COMMON_MAP_SCALES,
+  hydrogeological: COMMON_MAP_SCALES,
+  hydrochemical: COMMON_MAP_SCALES,
+  engineering_geological: COMMON_MAP_SCALES,
+  topo: COMMON_MAP_SCALES,
 };
 
 const YEAR_OPTIONS = [];
