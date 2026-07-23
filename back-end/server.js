@@ -141,10 +141,10 @@ function chainForClass(securityClass) {
 // Technical Reports, Maps, Other Publications. Fees are keyed by the
 // book's category, NOT by its security class (the class only decides
 // whether approval is needed, not the price).
-const FEE_CATEGORIES = ['technical_report', 'map', 'other_publication'];
+const FEE_CATEGORIES = ['technical_report', 'map', 'other_publication', 'book'];
 
 async function getCategoryFees() {
-  const fallback = { technical_report: 2, map: 5, other_publication: 2 };
+  const fallback = { technical_report: 2, map: 5, other_publication: 2, book: 2 };
   try {
     const res = await pool.query("SELECT config_data FROM system_settings WHERE setting_key = 'category_fees'");
     if (res.rows.length === 0) return fallback;
@@ -154,6 +154,7 @@ async function getCategoryFees() {
       technical_report: Number(parsed.technical_report) || fallback.technical_report,
       map: Number(parsed.map) || fallback.map,
       other_publication: Number(parsed.other_publication) || fallback.other_publication,
+      book: Number(parsed.book) || fallback.book,
     };
   } catch (err) {
     console.error('Failed to load category fees, using default:', err.message);
@@ -566,13 +567,15 @@ app.put('/api/users/:id/status', async (req, res) => {
 app.get('/api/books/search', async (req, res) => {
   const {
     title, author, department, location, year, yearFrom, yearTo,
-    category, reportTopic, mapType, mapFormat, scale
+    category, reportTopic, mapType, mapFormat, scale, subject, callNumber
   } = req.query;
   try {
     let query = 'SELECT * FROM books WHERE 1=1';
     const values = [];
     if (title) { values.push(`%${title}%`); query += ` AND title ILIKE $${values.length}`; }
     if (author) { values.push(`%${author}%`); query += ` AND author ILIKE $${values.length}`; }
+    if (subject) { values.push(`%${subject}%`); query += ` AND subject ILIKE $${values.length}`; }
+    if (callNumber) { values.push(`%${callNumber}%`); query += ` AND call_number ILIKE $${values.length}`; }
     if (department) { values.push(department); query += ` AND department = $${values.length}`; }
     if (location) { values.push(location); query += ` AND location = $${values.length}`; }
     if (category) { values.push(category); query += ` AND category = $${values.length}`; }
@@ -595,19 +598,20 @@ app.get('/api/books/search', async (req, res) => {
 app.post('/api/books', upload.single('pdfFile'), async (req, res) => {
   const {
     title, author, department, location, published_year, page_count, uploadedBy, security_class,
-    category, reportTopic, mapType, mapFormat, scale
+    category, reportTopic, mapType, mapFormat, scale, subject, call_number
   } = req.body;
   const file_path = req.file ? req.file.filename : null;
   const secClass = ['normal', 'medium', 'strict'].includes(security_class) ? security_class : 'normal';
   try {
     const result = await pool.query(
       `INSERT INTO books (title, author, department, location, published_year, page_count, file_path, uploaded_by, security_class,
-                           category, report_topic, map_type, map_format, scale)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14) RETURNING *`,
+                           category, report_topic, map_type, map_format, scale, subject, call_number)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16) RETURNING *`,
       [
         title, author, department, location, parseInt(published_year) || null, parseInt(page_count) || 12,
         file_path, uploadedBy ? parseInt(uploadedBy) : null, secClass,
-        category || null, reportTopic || null, mapType || null, mapFormat || null, scale || null
+        category || null, reportTopic || null, mapType || null, mapFormat || null, scale || null,
+        subject || null, call_number || null
       ]
     );
     const newBook = result.rows[0];
@@ -623,7 +627,7 @@ app.put('/api/books/:id', upload.single('pdfFile'), async (req, res) => {
   const { id } = req.params;
   const {
     title, author, department, location, published_year, page_count, editedBy, security_class,
-    category, reportTopic, mapType, mapFormat, scale
+    category, reportTopic, mapType, mapFormat, scale, subject, call_number
   } = req.body;
   const secClass = ['normal', 'medium', 'strict'].includes(security_class) ? security_class : 'normal';
   try {
@@ -631,21 +635,25 @@ app.put('/api/books/:id', upload.single('pdfFile'), async (req, res) => {
     if (req.file) {
       result = await pool.query(
         `UPDATE books SET title=$1, author=$2, department=$3, location=$4, published_year=$5, page_count=$6,
-                file_path=$7, security_class=$8, category=$9, report_topic=$10, map_type=$11, map_format=$12, scale=$13, updated_at=NOW()
-         WHERE id=$14 RETURNING *`,
+                file_path=$7, security_class=$8, category=$9, report_topic=$10, map_type=$11, map_format=$12, scale=$13,
+                subject=$14, call_number=$15, updated_at=NOW()
+         WHERE id=$16 RETURNING *`,
         [
           title, author, department, location, parseInt(published_year) || null, parseInt(page_count) || 12,
-          req.file.filename, secClass, category || null, reportTopic || null, mapType || null, mapFormat || null, scale || null, id
+          req.file.filename, secClass, category || null, reportTopic || null, mapType || null, mapFormat || null, scale || null,
+          subject || null, call_number || null, id
         ]
       );
     } else {
       result = await pool.query(
         `UPDATE books SET title=$1, author=$2, department=$3, location=$4, published_year=$5, page_count=$6,
-                security_class=$7, category=$8, report_topic=$9, map_type=$10, map_format=$11, scale=$12, updated_at=NOW()
-         WHERE id=$13 RETURNING *`,
+                security_class=$7, category=$8, report_topic=$9, map_type=$10, map_format=$11, scale=$12,
+                subject=$13, call_number=$14, updated_at=NOW()
+         WHERE id=$15 RETURNING *`,
         [
           title, author, department, location, parseInt(published_year) || null, parseInt(page_count) || 12,
-          secClass, category || null, reportTopic || null, mapType || null, mapFormat || null, scale || null, id
+          secClass, category || null, reportTopic || null, mapType || null, mapFormat || null, scale || null,
+          subject || null, call_number || null, id
         ]
       );
     }
@@ -800,6 +808,7 @@ app.put('/api/settings/category-fees', async (req, res) => {
     technical_report: Number(fees.technical_report) || 0,
     map: Number(fees.map) || 0,
     other_publication: Number(fees.other_publication) || 0,
+    book: Number(fees.book) || 0,
   };
   try {
     await pool.query(
@@ -810,7 +819,7 @@ app.put('/api/settings/category-fees', async (req, res) => {
     );
     await writeAuditLog(
       changedBy, 'Category Fees Updated',
-      `Per-page fees set — Technical Reports: ${normalized.technical_report}, Maps: ${normalized.map}, Other Publications: ${normalized.other_publication}`,
+      `Per-page fees set — Technical Reports: ${normalized.technical_report}, Maps: ${normalized.map}, Other Publications: ${normalized.other_publication}, Books: ${normalized.book}`,
       'warning'
     );
     res.json({ success: true, fees: normalized });
@@ -1053,34 +1062,37 @@ app.put('/api/office-requests/:id/accept', async (req, res) => {
         if (reqRow.requested_permission === 'add') {
           await pool.query(
             `INSERT INTO books (title, author, department, location, published_year, page_count, file_path, uploaded_by, security_class,
-                                 category, report_topic, map_type, map_format, scale)
-             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
+                                 category, report_topic, map_type, map_format, scale, subject, call_number)
+             VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)`,
             [
               data.title, data.author, data.department, data.location, parseInt(data.published_year) || null, parseInt(data.page_count) || 12,
               data.file_path || null, reqRow.requested_by, data.security_class || 'normal',
-              data.category || null, data.reportTopic || null, data.mapType || null, data.mapFormat || null, data.scale || null
+              data.category || null, data.reportTopic || null, data.mapType || null, data.mapFormat || null, data.scale || null,
+              data.subject || null, data.call_number || null
             ]
           );
         } else if (reqRow.requested_permission === 'edit') {
           if (data.file_path) {
             await pool.query(
               `UPDATE books SET title=$1, author=$2, department=$3, location=$4, published_year=$5, page_count=$6, file_path=$7, security_class=$8,
-                      category=$9, report_topic=$10, map_type=$11, map_format=$12, scale=$13, updated_at=NOW() WHERE id=$14`,
+                      category=$9, report_topic=$10, map_type=$11, map_format=$12, scale=$13, subject=$14, call_number=$15, updated_at=NOW() WHERE id=$16`,
               [
                 data.title, data.author, data.department, data.location, parseInt(data.published_year) || null, parseInt(data.page_count) || 12,
                 data.file_path, data.security_class || 'normal',
                 data.category || null, data.reportTopic || null, data.mapType || null, data.mapFormat || null, data.scale || null,
+                data.subject || null, data.call_number || null,
                 reqRow.target_book_id
               ]
             );
           } else {
             await pool.query(
               `UPDATE books SET title=$1, author=$2, department=$3, location=$4, published_year=$5, page_count=$6, security_class=$7,
-                      category=$8, report_topic=$9, map_type=$10, map_format=$11, scale=$12, updated_at=NOW() WHERE id=$13`,
+                      category=$8, report_topic=$9, map_type=$10, map_format=$11, scale=$12, subject=$13, call_number=$14, updated_at=NOW() WHERE id=$15`,
               [
                 data.title, data.author, data.department, data.location, parseInt(data.published_year) || null, parseInt(data.page_count) || 12,
                 data.security_class || 'normal',
                 data.category || null, data.reportTopic || null, data.mapType || null, data.mapFormat || null, data.scale || null,
+                data.subject || null, data.call_number || null,
                 reqRow.target_book_id
               ]
             );
@@ -1471,6 +1483,8 @@ async function ensureAdminAccount() {
 async function ensureSchemaUpgrades() {
   try {
     await pool.query('ALTER TABLE approval_requests ADD COLUMN IF NOT EXISTS assigned_reviewer_id INTEGER');
+    await pool.query('ALTER TABLE books ADD COLUMN IF NOT EXISTS subject TEXT');
+    await pool.query('ALTER TABLE books ADD COLUMN IF NOT EXISTS call_number VARCHAR(60)');
   } catch (err) {
     console.error('Schema upgrade failed:', err.message);
   }

@@ -174,6 +174,22 @@ function LibFilterRow({ filters, setFilters, departmentOptions, locationOptions 
         />
       </div>
       <div className="lib-filter-field">
+        <label>Subject</label>
+        <input
+          placeholder="Search subject..."
+          value={filters.subject}
+          onChange={e => setFilters({ ...filters, subject: e.target.value })}
+        />
+      </div>
+      <div className="lib-filter-field">
+        <label>Call Number</label>
+        <input
+          placeholder="Search call number..."
+          value={filters.callNumber}
+          onChange={e => setFilters({ ...filters, callNumber: e.target.value })}
+        />
+      </div>
+      <div className="lib-filter-field">
         <label>Department</label>
         <select value={filters.department} onChange={e => setFilters({ ...filters, department: e.target.value })}>
           <option value="">All</option>
@@ -204,7 +220,7 @@ function LibFilterRow({ filters, setFilters, departmentOptions, locationOptions 
       <button
         type="button"
         className="lib-filter-reset"
-        onClick={() => setFilters({ title: '', author: '', department: '', location: '', yearFrom: '', yearTo: '' })}
+        onClick={() => setFilters({ title: '', author: '', subject: '', callNumber: '', department: '', location: '', yearFrom: '', yearTo: '' })}
       >
         Reset
       </button>
@@ -220,12 +236,12 @@ function LibFilterRow({ filters, setFilters, departmentOptions, locationOptions 
 function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, canDo, onBack }) {
   const [books, setBooks] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filters, setFilters] = useState({ title: '', author: '', department: '', location: '', yearFrom: '', yearTo: '' });
+  const [filters, setFilters] = useState({ title: '', author: '', subject: '', callNumber: '', department: '', location: '', yearFrom: '', yearTo: '' });
 
   const [showModal, setShowModal] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [currentId, setCurrentId] = useState(null);
-  const [formData, setFormData] = useState({ title: '', author: '', department: '', location: '', published_year: '' });
+  const [formData, setFormData] = useState({ title: '', author: '', subject: '', call_number: '', department: '', location: '', published_year: '' });
   const [selectedFile, setSelectedFile] = useState(null);
 
   const [viewModal, setViewModal] = useState(false);
@@ -236,6 +252,8 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
     const qp = buildQueryParams({
       title: filters.title,
       author: filters.author,
+      subject: filters.subject,
+      callNumber: filters.callNumber,
       department: filters.department,
       location: filters.location,
       yearFrom: filters.yearFrom,
@@ -415,7 +433,7 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
   };
 
   const handleOpenAdd = () => {
-    setFormData({ title: '', author: '', department: '', location: '', published_year: '' });
+    setFormData({ title: '', author: '', subject: '', call_number: '', department: '', location: '', published_year: '' });
     setSelectedFile(null);
     setIsEditing(false);
     setShowModal(true);
@@ -425,6 +443,8 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
     setFormData({
       title: book.title || '',
       author: book.author || '',
+      subject: book.subject || '',
+      call_number: book.call_number || '',
       department: book.department || '',
       location: book.location || '',
       published_year: book.published_year || '',
@@ -472,6 +492,8 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
                   <h3>{book.title}</h3>
                   <div className="info-grid">
                     <span><strong>Author:</strong> {book.author}</span>
+                    {book.subject && <span><strong>Subject:</strong> {book.subject}</span>}
+                    {book.call_number && <span><strong>Call No.:</strong> {book.call_number}</span>}
                     <span><strong>Dept:</strong> {book.department}</span>
                     <span><strong>Loc:</strong> {book.location}</span>
                     <span><strong>Year:</strong> {book.published_year}</span>
@@ -521,6 +543,8 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
               <div className="modal-form-body">
                 <input placeholder="Title" value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} required />
                 <input placeholder="Author" value={formData.author} onChange={e => setFormData({ ...formData, author: e.target.value })} />
+                <input placeholder="Subject" value={formData.subject} onChange={e => setFormData({ ...formData, subject: e.target.value })} />
+                <input placeholder="Call Number" value={formData.call_number} onChange={e => setFormData({ ...formData, call_number: e.target.value })} />
                 <div className="form-row-dual">
                   <input placeholder="Dept" value={formData.department} onChange={e => setFormData({ ...formData, department: e.target.value })} />
                   <input placeholder="Year" value={formData.published_year} onChange={e => setFormData({ ...formData, published_year: e.target.value })} />
@@ -751,7 +775,7 @@ function OtherPublicationsPanel({ user, canAdd, canDelete, canDo }) {
 // MAIN DASHBOARD — Library category navigation shell
 // ============================================================================
 const Dashboard = ({ user, setUser }) => {
-  // view: 'home' | 'tech_topics' | 'tech_list' | 'maps_format' | 'maps_type' | 'maps_scale' | 'map_list' | 'other_pubs'
+  // view: 'home' | 'tech_topics' | 'tech_list' | 'maps_format' | 'maps_type' | 'maps_scale' | 'map_list' | 'other_pubs' | 'books_list'
   const [view, setView] = useState('home');
   const [navContext, setNavContext] = useState({ category: null, reportTopic: null, mapType: null, mapFormat: null, scale: null });
   const [topicSearch, setTopicSearch] = useState('');
@@ -794,7 +818,7 @@ const Dashboard = ({ user, setUser }) => {
     return (
       <div className="lib-breadcrumb">
         <button className="lib-back-btn" onClick={goHome}>← Library Home</button>
-        {view !== 'tech_topics' && view !== 'maps_format' && view !== 'other_pubs' && (
+        {view !== 'tech_topics' && view !== 'maps_format' && view !== 'other_pubs' && view !== 'books_list' && (
           <button
             className="lib-back-btn"
             onClick={() => {
@@ -827,6 +851,17 @@ const Dashboard = ({ user, setUser }) => {
         <div className="lib-card-icon">📚</div>
         <div className="lib-card-title">Other Publications</div>
         <div className="lib-card-sub">General document archive</div>
+      </div>
+      <div
+        className="lib-card"
+        onClick={() => {
+          setNavContext({ category: 'book', reportTopic: null, mapType: null, mapFormat: null, scale: null });
+          setView('books_list');
+        }}
+      >
+        <div className="lib-card-icon">📖</div>
+        <div className="lib-card-title">Books</div>
+        <div className="lib-card-sub">Search by author, title, subject, call number</div>
       </div>
     </div>
   );
@@ -916,6 +951,7 @@ const Dashboard = ({ user, setUser }) => {
 
   const panelTitleForList = () => {
     if (navContext.category === 'technical_report') return `Technical Reports — ${navContext.reportTopic}`;
+    if (navContext.category === 'book') return 'Books';
     const typeLabel = MAP_TYPES.find(m => m.key === navContext.mapType)?.label || 'Maps';
     const formatLabel = MAP_FORMATS.find(f => f.key === navContext.mapFormat)?.label || '';
     return navContext.scale ? `${typeLabel} — ${navContext.scale} (${formatLabel})` : `${typeLabel} (${formatLabel})`;
@@ -969,6 +1005,17 @@ const Dashboard = ({ user, setUser }) => {
           )}
           {view === 'other_pubs' && (
             <OtherPublicationsPanel user={user} canAdd={canAdd} canDelete={canDelete} canDo={canDo} />
+          )}
+          {view === 'books_list' && (
+            <DocumentListPanel
+              title="Books"
+              context={navContext}
+              user={user}
+              canEdit={canEdit}
+              canDelete={canDelete}
+              canAdd={canAdd}
+              canDo={canDo}
+            />
           )}
         </div>
       </div>

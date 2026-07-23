@@ -87,11 +87,11 @@ const UserDashboard = ({ user, setUser }) => {
   const [isEditing, setIsEditing] = useState(false);
   const [currentId, setCurrentId] = useState(null);
   const [formData, setFormData] = useState({
-    title: '', author: '', department: '', location: '', published_year: ''
+    title: '', author: '', subject: '', call_number: '', department: '', location: '', published_year: ''
   });
   const [selectedFile, setSelectedFile] = useState(null);
   const [filters, setFilters] = useState({
-    title: '', author: '', department: '', location: '', year: ''
+    title: '', author: '', subject: '', callNumber: '', department: '', location: '', year: ''
   });
   const [viewModal, setViewModal] = useState(false);
   const [selectedBook, setSelectedBook] = useState(null);
@@ -133,6 +133,8 @@ const UserDashboard = ({ user, setUser }) => {
       const queryParams = new URLSearchParams();
       if (filters.title) queryParams.append('title', filters.title);
       if (filters.author) queryParams.append('author', filters.author);
+      if (filters.subject) queryParams.append('subject', filters.subject);
+      if (filters.callNumber) queryParams.append('callNumber', filters.callNumber);
       if (filters.department) queryParams.append('department', filters.department);
       if (filters.location) queryParams.append('location', filters.location);
       if (filters.year) queryParams.append('year', filters.year);
@@ -379,7 +381,7 @@ const UserDashboard = ({ user, setUser }) => {
   };
 
   const handleOpenAdd = () => {
-    setFormData({ title: '', author: '', department: '', location: '', published_year: '' });
+    setFormData({ title: '', author: '', subject: '', call_number: '', department: '', location: '', published_year: '' });
     setSelectedFile(null);
     setIsEditing(false);
     setShowModal(true);
@@ -389,6 +391,8 @@ const UserDashboard = ({ user, setUser }) => {
     setFormData({
       title: book.title || '',
       author: book.author || '',
+      subject: book.subject || '',
+      call_number: book.call_number || '',
       department: book.department || '',
       location: book.location || '',
       published_year: book.published_year || ''
@@ -488,6 +492,8 @@ const UserDashboard = ({ user, setUser }) => {
           ),
           h('div', { className: 'info-grid' },
             h('span', null, h('strong', null, 'Author: '), book.author),
+            book.subject && h('span', null, h('strong', null, 'Subject: '), book.subject),
+            book.call_number && h('span', null, h('strong', null, 'Call No.: '), book.call_number),
             h('span', null, h('strong', null, 'Dept: '), book.department),
             h('span', null, h('strong', null, 'Loc: '), book.location),
             h('span', null, h('strong', null, 'Year: '), book.published_year),
@@ -753,10 +759,18 @@ const UserDashboard = ({ user, setUser }) => {
           h('label', null, 'Author'),
           h('input', { placeholder: 'Search author...', value: filters.author, onChange: e => setFilters({ ...filters, author: e.target.value }) })
         ),
+        h('div', { className: 'filter-input-gold' },
+          h('label', null, 'Subject'),
+          h('input', { placeholder: 'Search subject...', value: filters.subject, onChange: e => setFilters({ ...filters, subject: e.target.value }) })
+        ),
+        h('div', { className: 'filter-input-gold' },
+          h('label', null, 'Call Number'),
+          h('input', { placeholder: 'Search call number...', value: filters.callNumber, onChange: e => setFilters({ ...filters, callNumber: e.target.value }) })
+        ),
         h(FilterDropdown, { label: 'Department', options: departmentOptions, value: filters.department, className: 'select-gold', onChange: e => setFilters({ ...filters, department: e.target.value }) }),
         h(FilterDropdown, { label: 'Location', options: locationOptions, value: filters.location, className: 'select-gold', onChange: e => setFilters({ ...filters, location: e.target.value }) }),
         h(FilterDropdown, { label: 'Year', options: yearOptions, value: filters.year, className: 'select-gold', onChange: e => setFilters({ ...filters, year: e.target.value }) }),
-        h('button', { className: 'btn-reset', onClick: () => setFilters({ title: '', author: '', department: '', location: '', year: '' }) }, 'Reset Filters')
+        h('button', { className: 'btn-reset', onClick: () => setFilters({ title: '', author: '', subject: '', callNumber: '', department: '', location: '', year: '' }) }, 'Reset Filters')
       ),
       h('button', { className: 'logout-btn-red', onClick: handleLogout }, 'Logout System')
     ),
@@ -796,6 +810,8 @@ const UserDashboard = ({ user, setUser }) => {
           h('div', { className: 'modal-form-body' },
             h('input', { placeholder: 'Title', value: formData.title, onChange: e => setFormData({ ...formData, title: e.target.value }), required: true }),
             h('input', { placeholder: 'Author', value: formData.author, onChange: e => setFormData({ ...formData, author: e.target.value }) }),
+            h('input', { placeholder: 'Subject', value: formData.subject, onChange: e => setFormData({ ...formData, subject: e.target.value }) }),
+            h('input', { placeholder: 'Call Number', value: formData.call_number, onChange: e => setFormData({ ...formData, call_number: e.target.value }) }),
             h('div', { className: 'form-row-dual' },
               h('input', { placeholder: 'Dept', value: formData.department, onChange: e => setFormData({ ...formData, department: e.target.value }) }),
               h('input', { placeholder: 'Year', value: formData.published_year, onChange: e => setFormData({ ...formData, published_year: e.target.value }) })

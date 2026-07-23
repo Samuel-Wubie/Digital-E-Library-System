@@ -71,13 +71,14 @@ const defaultResponsibility = {
 };
 
 // Download fees are keyed by document CATEGORY, not security class.
-const FEE_CATEGORIES = ["technical_report", "map", "other_publication"];
+const FEE_CATEGORIES = ["technical_report", "map", "other_publication", "book"];
 const FEE_CATEGORY_LABELS = {
   technical_report: "Technical Reports",
   map: "Maps",
   other_publication: "Other Publications",
+  book: "Books",
 };
-const defaultCategoryFees = { technical_report: 2, map: 5, other_publication: 2 };
+const defaultCategoryFees = { technical_report: 2, map: 5, other_publication: 2, book: 2 };
 
 function formatBirr(amount) {
   return `ETB ${Number(amount || 0).toFixed(2)}`;
