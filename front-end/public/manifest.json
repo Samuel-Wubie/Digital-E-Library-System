@@ -1,6 +1,6 @@
 {
-  "short_name": "React App",
-  "name": "Create React App Sample",
+  "short_name": "GIE Library",
+  "name": "GIE Digital Library System",
   "icons": [
     {
       "src": "favicon.ico",

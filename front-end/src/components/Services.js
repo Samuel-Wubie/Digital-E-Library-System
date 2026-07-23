@@ -106,7 +106,7 @@ const SignUp = ({ onSignupSuccess, onSwitchToLogin }) => {
       h('div', { className: 'signup-header' },
         h('img', { src: libraryLogo, alt: 'Library logo', className: 'signup-logo' }),
         h('h1', { className: 'signup-title' }, 'Create your account'),
-        h('p', { className: 'signup-subtitle' }, 'Sign up to access the GIE / EGI Library system')
+        h('p', { className: 'signup-subtitle' }, 'Sign up to access the GIE Digital Library System')
       ),
 
       renderAlert(),

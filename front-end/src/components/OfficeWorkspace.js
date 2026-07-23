@@ -85,7 +85,7 @@ function OfficeWorkspace({ user, setUser }) {
       h('div', { className: 'ow-side-brand' },
         h('img', { src: libraryLogo, alt: 'Library logo', className: 'ow-side-logo' }),
         h('div', null,
-          h('div', { className: 'ow-side-title' }, 'EGI Library'),
+          h('div', { className: 'ow-side-title' }, 'GIE Library'),
           h('div', { className: 'ow-side-sub' }, 'Office workspace')
         ),
         // Bell renders only for maker roles (Officer, Senior Officer);

@@ -81,7 +81,7 @@ function LoginScreen({ onLoginSuccess, onSwitchToSignup, onSwitchToForgotPasswor
     h('div', { className: 'login-branding' },
       h('img', { src: libraryImage, alt: 'Digital Library', className: 'login-branding-image' }),
       h('div', { className: 'login-branding-overlay' },
-        h('h2', { className: 'login-branding-title' }, 'EGI Digital Library'),
+        h('h2', { className: 'login-branding-title' }, 'GIE Digital Library'),
         h('p', { className: 'login-branding-text' },
           'Technical reports, maps and publications — searchable, secure, and all in one place.')
       )
@@ -91,7 +91,7 @@ function LoginScreen({ onLoginSuccess, onSwitchToSignup, onSwitchToForgotPasswor
       h('div', { className: 'login-card' },
         h('div', { className: 'login-header' },
           h('img', { src: gieLogo, alt: 'Library logo', className: 'login-logo' }),
-          h('h1', { className: 'login-title' }, 'EGI Digital Library System'),
+          h('h1', { className: 'login-title' }, 'GIE Digital Library System'),
           h('p', { className: 'login-subtitle' }, 'Sign in to continue')
         ),
 
