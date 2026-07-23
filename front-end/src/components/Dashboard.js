@@ -123,6 +123,13 @@ const SCALES_BY_MAP_TYPE = {
   topo: COMMON_MAP_SCALES,
 };
 
+const OTHER_PUB_TYPES = [
+  { key: 'company_report', label: 'Company Reports' },
+  { key: 'journal', label: 'Journals' },
+  { key: 'governmental_publication', label: 'Governmental Publications' },
+  { key: 'other', label: 'Others' },
+];
+
 const YEAR_OPTIONS = [];
 for (let y = CURRENT_YEAR; y >= EARLIEST_YEAR; y--) YEAR_OPTIONS.push(y);
 
@@ -269,6 +276,7 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
       mapType: context.mapType,
       mapFormat: context.mapFormat,
       scale: context.scale,
+      pubType: context.pubType,
     });
     fetch(`${API}/api/books/search?${qp.toString()}`)
       .then(res => res.json())
@@ -323,6 +331,7 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
       mapType: context.mapType,
       mapFormat: context.mapFormat,
       scale: context.scale,
+      pubType: context.pubType,
     };
     multiPartForm.append('metaContext', JSON.stringify(mergedContext));
 
@@ -576,214 +585,12 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
 }
 
 // ============================================================================
-// OTHER PUBLICATIONS — plain file list, no metadata / no search
-// ============================================================================
-function OtherPublicationsPanel({ user, canAdd, canDelete, canDo }) {
-  const [files, setFiles] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [showModal, setShowModal] = useState(false);
-  const [title, setTitle] = useState('');
-  const [selectedFile, setSelectedFile] = useState(null);
-
-  const fetchFiles = useCallback(() => {
-    setLoading(true);
-    fetch(`${API}/api/books/search?category=other_publication`)
-      .then(res => res.json())
-      .then(data => { setFiles(Array.isArray(data) ? data : []); setLoading(false); })
-      .catch(err => { console.error(err); setLoading(false); });
-  }, []);
-
-  useEffect(() => { fetchFiles(); }, [fetchFiles]);
-
-  const submitRequest = async (actionType, targetLabel, contextPayload = {}, uploadedFile = null) => {
-    if (!canDo(actionType)) { showAlert(`Access Denied: Your role does not have permission to ${actionType}.`); return false; }
-    const reviewerRole = reviewerRoleForMaker(user.role);
-    const reviewers = await fetchReviewers(reviewerRole);
-    const reasonResult = await askReason({
-      title: 'Authorization Request',
-      message: `ENTER YOUR BUSINESS REASON TO INITIATE THIS ${String(actionType).toUpperCase()} REQUEST.`,
-      reviewers,
-      reviewerLabel: `Send to (${reviewerRole})`,
-    });
-    if (!reasonResult) return false;
-    const userReason = typeof reasonResult === 'string' ? reasonResult : reasonResult.reason;
-    const assignedReviewerId = typeof reasonResult === 'string' ? null : reasonResult.reviewerId;
-
-    const form = new FormData();
-    form.append('makerId', user.id);
-    form.append('makerRole', user.role);
-    form.append('requestType', 'permission');
-    form.append('requestedPermission', actionType);
-    form.append('targetLabel', targetLabel);
-    form.append('reason', userReason);
-    if (assignedReviewerId) form.append('assignedReviewerId', assignedReviewerId);
-    if (contextPayload.targetId) form.append('targetBookId', contextPayload.targetId);
-    form.append('metaContext', JSON.stringify({ ...contextPayload, category: 'other_publication' }));
-    if (uploadedFile) form.append('pdfFile', uploadedFile);
-
-    try {
-      const res = await fetch(`${API}/api/office-requests`, { method: 'POST', body: form });
-      if (res.ok) { showAlert('Request submitted to the approval chain.'); return true; }
-      const errData = await res.json();
-      showAlert(`Pipeline error: ${errData.message}`);
-      return false;
-    } catch (err) {
-      console.error(err);
-      showAlert('System error submitting the request.');
-      return false;
-    }
-  };
-
-  const handleUpload = async (e) => {
-    e.preventDefault();
-    const finalTitle = title.trim() || (selectedFile ? selectedFile.name : 'Untitled Publication');
-    const ok = await submitRequest('add', `Create New Record: ${finalTitle}`, { title: finalTitle, isEditing: false, targetId: null }, selectedFile);
-    if (ok) { setShowModal(false); setTitle(''); setSelectedFile(null); fetchFiles(); }
-  };
-
-  const handleDelete = async (f) => {
-    await submitRequest('delete', `Delete Record: ${f.title}`, { bookId: f.id });
-  };
-
-  const handleDownload = async (f) => {
-    if (!f.file_path) { showAlert('No file available for download.'); return; }
-    if (!canDo('download')) { showAlert('Access Denied: Your role does not have permission to download.'); return; }
-
-    // Same rules as the main library: Senior Officer and above download
-    // directly; Officers ask the Senior Officer (checker) and download free
-    // once accepted; Users ask a checker then pay.
-    const isOfficerMaker = user?.role === 'Officer';
-    if (user?.role !== 'User' && !isOfficerMaker) {
-      window.open(`${API}/api/downloads/direct/${f.id}?userId=${user.id}`, '_blank', 'noopener');
-      return;
-    }
-
-    try {
-      // Same maker → checker flow as the main library downloads.
-      const mineRes = await fetch(`${API}/api/office-requests?makerId=${user.id}&requestType=download`);
-      const mine = await mineRes.json();
-      if (mineRes.ok && Array.isArray(mine)) {
-        const existing = mine.find(r => r.targetBookId === f.id && r.stage !== 'rejected' && !(r.stage === 'approved' && r.paymentStatus === 'paid' && !isOfficerMaker));
-        if (existing && existing.stage === 'approved' && isOfficerMaker) {
-          window.open(`${API}/api/downloads/${existing.id}/file?userId=${user.id}`, '_blank', 'noopener');
-          return;
-        }
-        if (existing && existing.stage === 'approved') {
-          const payNow = await askConfirm({
-            title: 'Download Approved',
-            message: `YOUR REQUEST ${existing.requestCode} WAS ACCEPTED BY THE CHECKER.\nFee: ${existing.totalFee} ETB (${existing.pageCount} pages @ ${existing.feePerPage}/page).\n\nPay and download now?`,
-            okLabel: 'Pay & Download',
-          });
-          if (!payNow) return;
-          const payRes = await fetch(`${API}/api/payments/checkout`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ requestId: existing.id, userId: user.id }),
-          });
-          const payment = await payRes.json();
-          if (!payRes.ok) { showAlert(payment.message || 'Payment failed.'); return; }
-          window.open(`${API}${payment.downloadUrl}`, '_blank');
-          return;
-        }
-        if (existing) {
-          showAlert(`Your request ${existing.requestCode} is still waiting for the checker to accept it. Once accepted, click Download again to pay and download.`);
-          return;
-        }
-      }
-
-      const initRes = await fetch(`${API}/api/downloads/initiate`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookId: f.id }),
-      });
-      const quote = await initRes.json();
-      if (!initRes.ok) { showAlert(quote.message || 'Could not get a download quote.'); return; }
-
-      const reviewerRole = reviewerRoleForMaker(user.role);
-      const reviewers = await fetchReviewers(reviewerRole);
-      const reasonResult = await askReason({
-        title: 'Download Request',
-        message: isOfficerMaker
-          ? `"${quote.title}" — your request will be sent to the Senior Officer (checker) for acceptance. No fee. Enter your reason for this download.`
-          : `"${quote.title}" — ${quote.totalFee} ETB (${quote.pageCount} pages @ ${quote.feePerPage}/page). Your request will be sent to the checker for acceptance. Enter your reason for this download.`,
-        reviewers,
-        reviewerLabel: `Send to (${reviewerRole})`,
-      });
-      if (!reasonResult) return;
-      const reason = typeof reasonResult === 'string' ? reasonResult : reasonResult.reason;
-      const assignedReviewerId = typeof reasonResult === 'string' ? null : reasonResult.reviewerId;
-
-      const reqRes = await fetch(`${API}/api/downloads/request`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ bookId: f.id, userId: user.id, reason, assignedReviewerId }),
-      });
-      const request = await reqRes.json();
-      if (!reqRes.ok) { showAlert(request.message || 'Could not submit the download request.'); return; }
-
-      showAlert(isOfficerMaker
-        ? `Request ${request.request_code} sent to the Senior Officer with your reason. Once accepted, click Download again to download.`
-        : `Request ${request.request_code} sent to the checker with your reason. Once the checker accepts it, click Download again to pay and download.`);
-    } catch (err) {
-      console.error('Download flow failed:', err);
-      showAlert('System error during the download flow.');
-    }
-  };
-
-  return (
-    <div>
-      <h3 className="lib-panel-title">Other Publications</h3>
-      {canAdd && (
-        <div style={{ marginBottom: '16px' }}>
-          <button className="btn-add-elegant" onClick={() => setShowModal(true)}>+ Upload Publication</button>
-        </div>
-      )}
-      {loading ? <div className="loader-text">Querying Live Vault...</div> : (
-        <div className="lib-other-pub-list">
-          {files.map(f => (
-            <div key={f.id} className="lib-other-pub-row">
-              <div className="lib-other-pub-name">📄 {f.title}</div>
-              <div className="lib-other-pub-actions">
-                {f.file_path && (
-                  <a className="btn-view" href={`${API}/uploades/${f.file_path}`} target="_blank" rel="noreferrer">View</a>
-                )}
-                {canDo('download') && <button className="btn-download" onClick={() => handleDownload(f)}>Download</button>}
-                {canDelete && <button className="delete-link" onClick={() => handleDelete(f)}>Delete</button>}
-              </div>
-            </div>
-          ))}
-          {files.length === 0 && <div className="no-records-msg">No publications uploaded yet.</div>}
-        </div>
-      )}
-
-      {showModal && (
-        <div className="modal-overlay">
-          <div className="modal-content">
-            <h3>Request Upload Authorization</h3>
-            <form onSubmit={handleUpload}>
-              <div className="modal-form-body">
-                <input placeholder="Title (optional — filename used if left blank)" value={title} onChange={e => setTitle(e.target.value)} />
-                <input type="file" onChange={e => setSelectedFile(e.target.files[0])} required />
-              </div>
-              <div className="modal-footer">
-                <button type="button" onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className="save-btn">Submit Request</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ============================================================================
 // MAIN DASHBOARD — Library category navigation shell
 // ============================================================================
 const Dashboard = ({ user, setUser }) => {
-  // view: 'home' | 'tech_topics' | 'tech_list' | 'maps_format' | 'maps_type' | 'maps_scale' | 'map_list' | 'other_pubs' | 'books_list'
+  // view: 'home' | 'tech_topics' | 'tech_list' | 'maps_format' | 'maps_type' | 'maps_scale' | 'map_list' | 'other_pub_types' | 'other_pubs_list' | 'books_list'
   const [view, setView] = useState('home');
-  const [navContext, setNavContext] = useState({ category: null, reportTopic: null, mapType: null, mapFormat: null, scale: null });
+  const [navContext, setNavContext] = useState({ category: null, reportTopic: null, mapType: null, mapFormat: null, scale: null, pubType: null });
   const [topicSearch, setTopicSearch] = useState('');
 
   const { can: canDo } = usePermissions(user?.role);
@@ -811,7 +618,7 @@ const Dashboard = ({ user, setUser }) => {
     localStorage.removeItem('user');
   };
 
-  const goHome = () => { setView('home'); setNavContext({ category: null, reportTopic: null, mapType: null, mapFormat: null, scale: null }); setTopicSearch(''); };
+  const goHome = () => { setView('home'); setNavContext({ category: null, reportTopic: null, mapType: null, mapFormat: null, scale: null, pubType: null }); setTopicSearch(''); };
 
   const filteredTechTopics = useMemo(() => {
     const q = topicSearch.trim().toLowerCase();
@@ -824,7 +631,7 @@ const Dashboard = ({ user, setUser }) => {
     return (
       <div className="lib-breadcrumb">
         <button className="lib-back-btn" onClick={goHome}>← Library Home</button>
-        {view !== 'tech_topics' && view !== 'maps_format' && view !== 'other_pubs' && view !== 'books_list' && (
+        {view !== 'tech_topics' && view !== 'maps_format' && view !== 'other_pub_types' && view !== 'books_list' && (
           <button
             className="lib-back-btn"
             onClick={() => {
@@ -832,6 +639,7 @@ const Dashboard = ({ user, setUser }) => {
               else if (view === 'maps_type') setView('maps_format');
               else if (view === 'maps_scale') setView('maps_type');
               else if (view === 'map_list') setView(navContext.mapType && SCALES_BY_MAP_TYPE[navContext.mapType] ? 'maps_scale' : 'maps_type');
+              else if (view === 'other_pubs_list') setView('other_pub_types');
             }}
           >
             ← Back
@@ -853,10 +661,10 @@ const Dashboard = ({ user, setUser }) => {
         <div className="lib-card-title">Maps</div>
         <div className="lib-card-sub">PDF · JPG · Shapefile</div>
       </div>
-      <div className="lib-card" onClick={() => setView('other_pubs')}>
+      <div className="lib-card" onClick={() => setView('other_pub_types')}>
         <div className="lib-card-icon">📚</div>
         <div className="lib-card-title">Other Publications</div>
-        <div className="lib-card-sub">General document archive</div>
+        <div className="lib-card-sub">Company · Journals · Government · Others</div>
       </div>
       <div
         className="lib-card"
@@ -917,6 +725,26 @@ const Dashboard = ({ user, setUser }) => {
     </div>
   );
 
+  const renderOtherPubTypes = () => (
+    <div>
+      <h3 className="lib-panel-title">Other Publications</h3>
+      <div className="lib-btn-grid">
+        {OTHER_PUB_TYPES.map(t => (
+          <div
+            key={t.key}
+            className="lib-format-btn"
+            onClick={() => {
+              setNavContext({ category: 'other_publication', reportTopic: null, mapType: null, mapFormat: null, scale: null, pubType: t.key });
+              setView('other_pubs_list');
+            }}
+          >
+            {t.label}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+
   const renderMapsType = () => (
     <div>
       <h3 className="lib-panel-title">Maps — {MAP_FORMATS.find(f => f.key === navContext.mapFormat)?.label}</h3>
@@ -958,6 +786,10 @@ const Dashboard = ({ user, setUser }) => {
   const panelTitleForList = () => {
     if (navContext.category === 'technical_report') return `Technical Reports — ${navContext.reportTopic}`;
     if (navContext.category === 'book') return 'Books';
+    if (navContext.category === 'other_publication') {
+      const pubLabel = OTHER_PUB_TYPES.find(t => t.key === navContext.pubType)?.label || 'Other Publications';
+      return `Other Publications — ${pubLabel}`;
+    }
     const typeLabel = MAP_TYPES.find(m => m.key === navContext.mapType)?.label || 'Maps';
     const formatLabel = MAP_FORMATS.find(f => f.key === navContext.mapFormat)?.label || '';
     return navContext.scale ? `${typeLabel} — ${navContext.scale} (${formatLabel})` : `${typeLabel} (${formatLabel})`;
@@ -1009,8 +841,17 @@ const Dashboard = ({ user, setUser }) => {
               canDo={canDo}
             />
           )}
-          {view === 'other_pubs' && (
-            <OtherPublicationsPanel user={user} canAdd={canAdd} canDelete={canDelete} canDo={canDo} />
+          {view === 'other_pub_types' && renderOtherPubTypes()}
+          {view === 'other_pubs_list' && (
+            <DocumentListPanel
+              title={panelTitleForList()}
+              context={navContext}
+              user={user}
+              canEdit={canEdit}
+              canDelete={canDelete}
+              canAdd={canAdd}
+              canDo={canDo}
+            />
           )}
           {view === 'books_list' && (
             <DocumentListPanel
