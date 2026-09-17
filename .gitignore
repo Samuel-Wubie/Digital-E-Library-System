@@ -10,6 +10,21 @@ node_modules/
 front-end/build/
 front-end/dist/
 
+# Bulk content — not code, and the running app never reads it.
+# db/ is input for the one-off import scripts only. Those scripts COPY files
+# into back-end/uploades and insert a books row; nothing at runtime opens db/.
+db/
+
+# Uploaded files live on the Railway volume (UPLOAD_DIR) in production.
+# server.js creates this folder on boot, so it does not need to be in git.
+back-end/uploades/
+
+# Database dumps — these contain every user's password hash
+library_dump*.sql
+
+# Scratch / stray files
+back-end/*.rtf
+
 # OS junk
 .DS_Store
 Thumbs.db
