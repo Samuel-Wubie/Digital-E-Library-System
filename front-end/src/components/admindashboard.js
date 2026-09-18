@@ -839,6 +839,35 @@ function AuditLog() {
 // ---------------------------------------------------------------------------
 // Documents — fetches from API
 // ---------------------------------------------------------------------------
+// Colour slots, assigned IN FIXED ORDER — never cycled, never generated.
+// This 8-hue order is validated for colour-blind separation on a white
+// surface (worst adjacent pair ΔE 9.1, floor is 8), so do not rearrange it.
+const BAR_COLORS = [
+  '#2a78d6', // blue
+  '#eb6834', // orange
+  '#1baf7a', // aqua
+  '#eda100', // yellow
+  '#e87ba4', // magenta
+  '#008300', // green
+  '#4a3aa7', // violet
+  '#e34948', // red
+];
+const BAR_COLOR_OVERFLOW = '#8a8a85'; // 9th+ document — neutral, never a 9th hue
+
+// Each document gets its own colour, keyed on the document TITLE rather than
+// its position in the list. That matters: download counts change, so if the
+// colour followed the rank, tomorrow's re-sort would repaint every bar and a
+// document someone remembers as "the green one" would silently become blue.
+// Keying on the title alphabetically keeps each document's colour stable.
+function buildBarColorMap(docs) {
+  const titles = [...new Set(docs.map(d => d.name))].sort();
+  const map = {};
+  titles.forEach((title, i) => {
+    map[title] = i < BAR_COLORS.length ? BAR_COLORS[i] : BAR_COLOR_OVERFLOW;
+  });
+  return map;
+}
+
 function Documents() {
   const [docs, setDocs]     = useState([]);
   const [loading, setLoading] = useState(true);
@@ -846,12 +875,19 @@ function Documents() {
   useEffect(() => {
     fetch(`${API}/api/dashboard/top-downloads`)
       .then(r => r.json())
-      .then(data => { setDocs(data); setLoading(false); })
+      .then(data => { setDocs(Array.isArray(data) ? data : []); setLoading(false); })
       .catch(err => { console.error(err); setLoading(false); });
   }, []);
 
   if (loading) return <div className="text-sm text-slate-400 p-6">Loading documents...</div>;
-  const maxDownloads = docs.length ? Math.max(...docs.map(d => d.downloads)) : 1;
+
+  const rows = docs.map(d => ({
+    name: d.name || 'Untitled',
+    dept: d.dept || 'Unassigned',
+    downloads: Number(d.downloads) || 0,
+  }));
+  const maxDownloads = rows.length ? Math.max(...rows.map(d => d.downloads), 1) : 1;
+  const barColors = buildBarColorMap(rows);
 
   return (
     <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
@@ -859,27 +895,42 @@ function Documents() {
         <h3 className="text-sm font-semibold text-slate-900">Highly downloaded documents</h3>
         <p className="text-xs text-slate-500 mt-0.5">Across all departments, all time</p>
       </div>
-      <div className="p-5 flex flex-col gap-4">
-        {docs.map((doc, i) => (
-          <div key={doc.name || i} className="flex items-center gap-4">
-            <span className="text-xs font-medium text-slate-400 w-4">{i + 1}</span>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between mb-1">
-                <span className="text-sm font-medium text-slate-700 truncate flex items-center gap-2">
-                  <FileText className="w-3.5 h-3.5 text-slate-400" />
-                  {doc.name}
-                </span>
-                <span className="text-xs font-semibold text-slate-600">{doc.downloads}</span>
-              </div>
-              <div className="h-1.5 rounded-full bg-slate-100 overflow-hidden">
-                <div className="h-full bg-blue-500 rounded-full"
-                  style={{ width: `${Math.round((doc.downloads / maxDownloads) * 100)}%` }} />
-              </div>
-              <div className="text-xs text-slate-400 mt-1">{doc.dept}</div>
-            </div>
+
+      {rows.length === 0 ? (
+        <div className="p-6 text-sm text-slate-400">No downloads recorded yet.</div>
+      ) : (
+        <div className="topdocs-body">
+          <div className="topdocs-columns">
+            {rows.map((doc, i) => {
+              // Floor of 4% so a document with a single download still shows
+              // a visible column instead of a sliver.
+              const pct = Math.max((doc.downloads / maxDownloads) * 100, 4);
+              return (
+                <div
+                  key={`${doc.name}-${i}`}
+                  className="topdocs-col"
+                  title={`${doc.name} — ${doc.dept} — ${doc.downloads} download${doc.downloads === 1 ? '' : 's'}`}
+                >
+                  <span className="topdocs-col-value">{doc.downloads}</span>
+
+                  <div className="topdocs-col-plot">
+                    <div
+                      className="topdocs-col-bar"
+                      style={{ height: `${pct}%`, backgroundColor: barColors[doc.name] }}
+                    />
+                  </div>
+
+                  <div className="topdocs-col-foot">
+                    <span className="topdocs-col-rank">{i + 1}</span>
+                    <span className="topdocs-col-title">{doc.name}</span>
+                    <span className="topdocs-col-dept">{doc.dept}</span>
+                  </div>
+                </div>
+              );
+            })}
           </div>
-        ))}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

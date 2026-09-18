@@ -1287,22 +1287,21 @@ app.post('/api/payments/checkout', async (req, res) => {
   const client = await pool.connect();
   try {
     const current = await client.query('SELECT * FROM approval_requests WHERE id = $1', [requestId]);
+    // NOTE: do NOT call client.release() in these early returns — the
+    // finally block below already releases it. Releasing twice makes pg
+    // throw "Client has already been released to the pool".
     if (current.rows.length === 0) {
-      client.release();
       return res.status(404).json({ message: "Request not found" });
     }
     const reqRow = current.rows[0];
 
     if (reqRow.requested_by !== parseInt(userId)) {
-      client.release();
       return res.status(403).json({ message: "Only the requester can pay for this download" });
     }
     if (reqRow.stage !== 'approved') {
-      client.release();
       return res.status(409).json({ message: "This request has not been approved yet" });
     }
     if (reqRow.payment_status === 'paid') {
-      client.release();
       return res.status(409).json({ message: "This download has already been paid for" });
     }
 
