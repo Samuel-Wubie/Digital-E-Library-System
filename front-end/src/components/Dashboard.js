@@ -259,6 +259,7 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
 
   const [viewModal, setViewModal] = useState(false);
   const [selectedBook, setSelectedBook] = useState(null);
+  const [previewUrl, setPreviewUrl] = useState(null);
 
   const fetchBooks = useCallback(() => {
     setLoading(true);
@@ -442,9 +443,28 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
     }
   };
 
-  const openViewPreview = (book) => {
-    if (book.file_path) { setSelectedBook(book); setViewModal(true); }
-    else showAlert('No PDF associated with this record.');
+  // Preview URLs are now short-lived signed links fetched from the backend
+  // rather than a direct /uploades/<filename> path, so the PDF is no longer
+  // readable by anyone who guesses the filename.
+  const openViewPreview = async (book) => {
+    if (!book.file_path) { showAlert('No PDF associated with this record.'); return; }
+    try {
+      const res = await fetch(`${API}/api/books/${book.id}/preview?userId=${user.id}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        showAlert(body.message || 'Could not open this document.');
+        return;
+      }
+      const { url } = await res.json();
+      // Local dev returns a relative /uploades path; production returns a
+      // full signed URL that already carries its own host.
+      setPreviewUrl(url.startsWith('http') ? url : `${API}${url}`);
+      setSelectedBook(book);
+      setViewModal(true);
+    } catch (err) {
+      console.error('Preview failed:', err);
+      showAlert('Could not open this document.');
+    }
   };
 
   const handleOpenAdd = () => {
@@ -534,16 +554,16 @@ function DocumentListPanel({ title, context, user, canEdit, canDelete, canAdd, c
         </div>
       )}
 
-      {viewModal && selectedBook && (
+      {viewModal && selectedBook && previewUrl && (
         <div className="modal-overlay">
           <div className="modal-content modal-content--viewer" style={{ maxWidth: '1100px', width: '95%', display: 'flex', flexDirection: 'column' }}>
             <div className="viewer-header" style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '10px 0', borderBottom: '1px solid #ddd' }}>
               <h3 style={{ margin: 0, color: '#1e293b' }}>Document Full View: {selectedBook.title}</h3>
-              <button className="close-viewer-btn" onClick={() => setViewModal(false)}>✕ Close Preview</button>
+              <button className="close-viewer-btn" onClick={() => { setViewModal(false); setPreviewUrl(null); }}>✕ Close Preview</button>
             </div>
             <div className="document-scroll-container" style={{ position: 'relative', height: '80vh', backgroundColor: '#525659', marginTop: '10px', borderRadius: '4px', overflow: 'hidden' }}>
-              <object data={`${API}/uploades/${selectedBook.file_path}#toolbar=1&navpanes=1`} type="application/pdf" width="100%" height="100%" style={{ border: 'none' }}>
-                <iframe src={`${API}/uploades/${selectedBook.file_path}#toolbar=1&navpanes=1`} title="PDF Fallback Full View" width="100%" height="100%" style={{ border: 'none' }} />
+              <object data={`${previewUrl}#toolbar=1&navpanes=1`} type="application/pdf" width="100%" height="100%" style={{ border: 'none' }}>
+                <iframe src={`${previewUrl}#toolbar=1&navpanes=1`} title="PDF Fallback Full View" width="100%" height="100%" style={{ border: 'none' }} />
               </object>
             </div>
           </div>

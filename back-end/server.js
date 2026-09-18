@@ -17,24 +17,33 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
-// Standardized on 'uploades' directory to match environment configurations.
-// In production set UPLOAD_DIR to a persistent disk (e.g. a Railway Volume
-// mounted at /data/uploades) — the default local folder is wiped on every
-// cloud redeploy.
-const uploadDir = process.env.UPLOAD_DIR || path.join(__dirname, 'uploades');
-if (!fs.existsSync(uploadDir)) {
-  fs.mkdirSync(uploadDir, { recursive: true });
-}
+// File storage lives in storage.js: Supabase Storage when SUPABASE_URL is
+// set (production on Render, whose disk is wiped on every restart), local
+// uploades/ folder otherwise (your PC). See that file for the reasoning.
+const fileStore = require('./storage');
+const uploadDir = fileStore.uploadDir;
 
-const storage = multer.diskStorage({
-  destination: (req, file, cb) => { cb(null, uploadDir); },
-  filename: (req, file, cb) => {
-    // Replaces physical spaces with dashes to guarantee trouble-free browser routing URL strings
-    const cleanedName = file.originalname.replace(/\s+/g, '-');
-    cb(null, Date.now() + '-' + cleanedName);
-  }
+// In remote mode the file goes to Supabase, so multer only needs to hold it
+// in memory. In local mode it writes to disk exactly as before.
+const storage = fileStore.isRemote()
+  ? multer.memoryStorage()
+  : multer.diskStorage({
+      destination: (req, file, cb) => { cb(null, uploadDir); },
+      filename: (req, file, cb) => {
+        // Replaces spaces with dashes for trouble-free URLs. basename()
+        // strips any directory part, so a crafted upload name such as
+        // "../../server.js" cannot escape the upload folder.
+        const cleanedName = path.basename(file.originalname).replace(/\s+/g, '-');
+        cb(null, Date.now() + '-' + cleanedName);
+      }
+    });
+
+const upload = multer({
+  storage,
+  // Supabase's free tier rejects anything over 50 MB, so refuse it here
+  // with a clear error rather than failing halfway through the upload.
+  limits: { fileSize: 50 * 1024 * 1024 },
 });
-const upload = multer({ storage });
 
 // ============================================================================
 // 2. DATABASE CONFIGURATION
@@ -53,16 +62,37 @@ pool.query('SELECT NOW()', (err, res) => {
 });
 
 // ============================================================================
-// 3. FILE SERVING MIDDLEWARE
-// NOTE: this still serves every uploaded file unauthenticated. It's kept as
-// a fallback for the existing preview modal, but it is a known bypass of the
-// payment gate below (documented, not yet closed — see /api/downloads/:id/file
-// for the gated path that should become the only way to fetch paid files).
+// 3. FILE SERVING
+// In remote (Supabase) mode nothing is served straight off the filesystem —
+// files are reached only through the gated routes below, which hand out
+// short-lived signed URLs. That closes the old hole where /uploades served
+// every PDF to anyone who knew the filename, bypassing the payment gate.
+//
+// In local mode the static route stays so local development is unchanged.
 // ============================================================================
-app.use('/uploades', (req, res, next) => {
-  req.url = decodeURIComponent(req.url);
-  next();
-}, express.static(uploadDir));
+if (!fileStore.isRemote()) {
+  app.use('/uploades', (req, res, next) => {
+    req.url = decodeURIComponent(req.url);
+    next();
+  }, express.static(uploadDir));
+}
+
+// Streams a stored file to the client: a redirect to a signed Supabase URL
+// in remote mode, a direct disk read locally. Callers do their own
+// permission checks BEFORE calling this.
+async function deliverFile(res, key, { download = true } = {}) {
+  if (!key) return res.status(404).json({ message: "No file associated with this record" });
+  if (!(await fileStore.exists(key))) {
+    return res.status(404).json({ message: "File no longer exists in storage" });
+  }
+  if (fileStore.isRemote()) {
+    const url = await fileStore.getSignedUrl(key, { download });
+    return res.redirect(url);
+  }
+  return download
+    ? res.download(fileStore.localPath(key))
+    : res.sendFile(fileStore.localPath(key));
+}
 
 // ============================================================================
 // CORE SYSTEM CONFIGURATION & ROUTING HELPERS
@@ -601,9 +631,9 @@ app.post('/api/books', upload.single('pdfFile'), async (req, res) => {
     title, author, department, location, published_year, page_count, uploadedBy, security_class,
     category, reportTopic, mapType, mapFormat, scale, subject, call_number, pubType
   } = req.body;
-  const file_path = req.file ? req.file.filename : null;
   const secClass = ['normal', 'medium', 'strict'].includes(security_class) ? security_class : 'normal';
   try {
+    const file_path = req.file ? await fileStore.saveUpload(req.file) : null;
     const result = await pool.query(
       `INSERT INTO books (title, author, department, location, published_year, page_count, file_path, uploaded_by, security_class,
                            category, report_topic, map_type, map_format, scale, subject, call_number, pub_type)
@@ -634,6 +664,7 @@ app.put('/api/books/:id', upload.single('pdfFile'), async (req, res) => {
   try {
     let result;
     if (req.file) {
+      const newKey = await fileStore.saveUpload(req.file);
       result = await pool.query(
         `UPDATE books SET title=$1, author=$2, department=$3, location=$4, published_year=$5, page_count=$6,
                 file_path=$7, security_class=$8, category=$9, report_topic=$10, map_type=$11, map_format=$12, scale=$13,
@@ -641,7 +672,7 @@ app.put('/api/books/:id', upload.single('pdfFile'), async (req, res) => {
          WHERE id=$17 RETURNING *`,
         [
           title, author, department, location, parseInt(published_year) || null, parseInt(page_count) || 12,
-          req.file.filename, secClass, category || null, reportTopic || null, mapType || null, mapFormat || null, scale || null,
+          newKey, secClass, category || null, reportTopic || null, mapType || null, mapFormat || null, scale || null,
           subject || null, call_number || null, pubType || null, id
         ]
       );
@@ -870,7 +901,7 @@ app.post('/api/office-requests', upload.single('pdfFile'), async (req, res) => {
         return res.status(400).json({ message: "Invalid staging context structure provided." });
       }
     }
-    if (req.file) contextPayload.file_path = req.file.filename;
+    if (req.file) contextPayload.file_path = await fileStore.saveUpload(req.file);
 
     const requestCode = await nextRequestCode();
     const action = `Permission: ${requestedPermission}`;
@@ -1357,15 +1388,11 @@ app.get('/api/downloads/direct/:bookId', async (req, res) => {
     const bookResult = await pool.query('SELECT id, title, file_path FROM books WHERE id = $1', [bookId]);
     if (bookResult.rows.length === 0) return res.status(404).json({ message: "Book not found" });
     const book = bookResult.rows[0];
-    if (!book.file_path) return res.status(404).json({ message: "No file associated with this record" });
-
-    const absolutePath = path.join(uploadDir, book.file_path);
-    if (!fs.existsSync(absolutePath)) return res.status(404).json({ message: "File no longer exists on disk" });
 
     await pool.query('UPDATE books SET download_count = download_count + 1 WHERE id = $1', [book.id]);
     await writeAuditLog(userId, 'Downloaded', `${requester.username} (${requester.role}) downloaded "${book.title}" — staff, no fee`, 'info');
 
-    res.download(absolutePath);
+    return deliverFile(res, book.file_path, { download: true });
   } catch (err) {
     console.error("Staff direct download failed:", err.message);
     res.status(500).send("Server Error");
@@ -1394,17 +1421,46 @@ app.get('/api/downloads/:requestId/file', async (req, res) => {
 
     const data = typeof reqRow.meta_context === 'string' ? JSON.parse(reqRow.meta_context) : reqRow.meta_context;
     const filePath = data && data.file_path;
-    if (!filePath) return res.status(404).json({ message: "No file associated with this request" });
-
-    const absolutePath = path.join(uploadDir, filePath);
-    if (!fs.existsSync(absolutePath)) return res.status(404).json({ message: "File no longer exists on disk" });
 
     await pool.query('UPDATE books SET download_count = download_count + 1 WHERE id = $1', [reqRow.target_book_id]);
     await writeAuditLog(userId, 'Downloaded', `${reqRow.request_code} — file delivered`, 'info');
 
-    res.download(absolutePath);
+    return deliverFile(res, filePath, { download: true });
   } catch (err) {
     console.error("Secured download failed:", err.message);
+    res.status(500).send("Server Error");
+  }
+});
+
+// --- PREVIEW LINK for the in-app PDF viewer ---
+// Replaces the old open /uploades route: the caller must be a signed-in user,
+// and the link it returns expires in 10 minutes. It's a preview, so it is
+// deliberately NOT gated on payment — same reach the old viewer had, minus
+// the "anyone on the internet with the filename" part.
+app.get('/api/books/:id/preview', async (req, res) => {
+  const { id } = req.params;
+  const { userId } = req.query;
+  if (!userId) return res.status(400).json({ message: "userId is required" });
+  try {
+    const userResult = await pool.query('SELECT id FROM users WHERE id = $1', [userId]);
+    if (userResult.rows.length === 0) return res.status(403).json({ message: "Unknown user" });
+
+    const bookResult = await pool.query('SELECT id, title, file_path FROM books WHERE id = $1', [id]);
+    if (bookResult.rows.length === 0) return res.status(404).json({ message: "Book not found" });
+    const book = bookResult.rows[0];
+    if (!book.file_path) return res.status(404).json({ message: "No file associated with this record" });
+
+    if (fileStore.isRemote()) {
+      if (!(await fileStore.exists(book.file_path))) {
+        return res.status(404).json({ message: "File no longer exists in storage" });
+      }
+      const url = await fileStore.getSignedUrl(book.file_path, { download: false });
+      return res.json({ url });
+    }
+    // Local dev: the static /uploades route is still mounted.
+    return res.json({ url: `/uploades/${encodeURIComponent(book.file_path)}` });
+  } catch (err) {
+    console.error("Preview link failed:", err.message);
     res.status(500).send("Server Error");
   }
 });
