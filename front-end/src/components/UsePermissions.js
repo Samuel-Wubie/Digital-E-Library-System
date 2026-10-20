@@ -7,10 +7,13 @@ import { API } from '../config';
 // an admin saves anything via AdminDashboard's AccessControlMatrix, this
 // fallback is never used again — the real saved matrix always wins.
 const FALLBACK_MATRIX = {
-  User:             { view: true, edit: false, delete: false, download: false },
-  Officer:          { view: true, edit: true,  delete: false, download: true  },
-  "Senior Officer": { view: true, edit: true,  delete: true,  download: true  },
-  "Department Head":{ view: true, edit: true,  delete: true,  download: true  },
+  // Users may download: that is the point of the library — they pay the
+  // per-page fee and take the document. An admin can still turn it off in
+  // Access control, but off-by-default made the whole paid flow invisible.
+  User:             { view: true, add: false, edit: false, delete: false, download: true  },
+  Officer:          { view: true, add: true,  edit: true,  delete: false, download: true  },
+  "Senior Officer": { view: true, add: true,  edit: true,  delete: true,  download: true  },
+  "Department Head":{ view: true, add: true,  edit: true,  delete: true,  download: true  },
 };
 
 // ----------------------------------------------------------------------------
@@ -24,8 +27,13 @@ const FALLBACK_MATRIX = {
 // stuck on FALLBACK_MATRIX and admin edits in Access Control never took
 // effect anywhere that used this hook (Dashboard.js, OfficeDashboard.js).
 // ----------------------------------------------------------------------------
-export function usePermissions(role) {
+// Pass a userId as well as the role and permissions delegated by a colleague
+// on leave are included. Without it you get the role's own permissions only,
+// which is what the admin screens want.
+export function usePermissions(role, userId) {
   const [matrix, setMatrix] = useState(null);
+  const [extra, setExtra] = useState(null);     // from delegation
+  const [delegated, setDelegated] = useState([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -42,16 +50,34 @@ export function usePermissions(role) {
       });
   }, []);
 
+  useEffect(() => {
+    if (!userId) { setExtra(null); setDelegated([]); return; }
+    fetch(`${API}/api/permissions/effective?userId=${userId}`)
+      .then(res => res.json())
+      .then(data => {
+        if (!data || data.message) return;
+        setExtra(data.permissions || null);
+        setDelegated(Array.isArray(data.delegated) ? data.delegated : []);
+      })
+      .catch(() => {});   // the role's own permissions still apply
+  }, [userId]);
+
   const can = (permission) => {
     if (!matrix || !role) return false;
     const rolePermissions = matrix[role];
+    // Delegation is additive, so a granted permission counts even when the
+    // person's own role does not have it.
+    if (extra && extra[permission]) return true;
     if (!rolePermissions) return false;
-    // The access matrix only stores view/edit/delete/download. "Add" is
-    // governed by the same permission as "edit" (see AccessControlMatrix),
-    // so map it here — otherwise canDo('add') always returns false.
-    const key = permission === 'add' ? 'edit' : permission;
-    return !!rolePermissions[key];
+    // 'add' is its own permission now. A matrix saved before the split has no
+    // 'add' key, so read it as 'edit' until an administrator sets them apart —
+    // the server migrates the stored matrix on boot, this covers the gap for
+    // anything still serving the old shape.
+    if (permission === 'add' && rolePermissions.add === undefined) {
+      return !!rolePermissions.edit;
+    }
+    return !!rolePermissions[permission];
   };
 
-  return { can, loading, matrix };
+  return { can, loading, matrix, delegated };
 }

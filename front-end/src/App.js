@@ -9,7 +9,6 @@ import OfficeWorkspace from './components/OfficeWorkspace';
 import UserWorkspace from './components/UserWorkspace';
 import SignUp from './components/SignUp';
 import ForgotPassword from './components/ForgotPassword';
-import libraryImage from './images/liabrary.png';
 import gieLogo from './logo.png';
 
 const h = React.createElement;
@@ -26,11 +25,26 @@ import { API } from './config';
 // Comparison is case/whitespace-insensitive so 'admin', 'Admin', 'ADMIN',
 // 'Manager', etc. all land on the right dashboard regardless of how the
 // role string was typed when the account was created.
-function routeForRole(role) {
+// Which workspace a person lands in. Roles are administrator-defined now, so
+// this reads the role's BEHAVIOUR rather than recognising names — a role
+// called "Archivist" has to land somewhere sensible too.
+//
+// `behaviour` arrives with the login response. The name check below is the
+// fallback for a session stored before behaviours existed, and for the
+// built-in roles if the roles table cannot be read.
+function routeForBehaviour(behaviour, role) {
+  if (behaviour === 'administrator') return 'admin-console';
+  if (behaviour === 'member') return 'user-dashboard';
+  if (behaviour === 'staff_maker' || behaviour === 'staff_direct') return 'office-dashboard';
+
   const r = String(role || '').trim().toLowerCase();
   if (r === 'admin' || r === 'administrator' || r === 'manager') return 'admin-console';
   if (r === 'user') return 'user-dashboard';
-  return 'office-dashboard'; // Officer, Senior Officer, Department Head
+  return 'office-dashboard';
+}
+
+function routeForUser(u) {
+  return routeForBehaviour(u?.behaviour, u?.role);
 }
 
 // ----------------------------------------------------------------------------
@@ -77,16 +91,6 @@ function LoginScreen({ onLoginSuccess, onSwitchToSignup, onSwitchToForgotPasswor
   };
 
   return h('div', { className: 'login-page' },
-    // Left half — library image with welcome overlay
-    h('div', { className: 'login-branding' },
-      h('img', { src: libraryImage, alt: 'Digital Library', className: 'login-branding-image' }),
-      h('div', { className: 'login-branding-overlay' },
-        h('h2', { className: 'login-branding-title' }, 'GIE Digital Library'),
-        h('p', { className: 'login-branding-text' },
-          'Technical reports, maps and publications — searchable, secure, and all in one place.')
-      )
-    ),
-    // Right half — login form
     h('div', { className: 'login-form-side' },
       h('div', { className: 'login-card' },
         h('div', { className: 'login-header' },
@@ -145,7 +149,9 @@ function LoginScreen({ onLoginSuccess, onSwitchToSignup, onSwitchToForgotPasswor
             'Create an account'
           )
         )
-      )
+      ),
+      h('p', { className: 'login-tagline' },
+        'Technical reports, maps and publications from the Geological Institute of Ethiopia.')
     )
   );
 }
@@ -168,7 +174,23 @@ export default function App() {
       try {
         const parsedUser = JSON.parse(stored);
         setUser(parsedUser);
-        setView(routeForRole(parsedUser.role));
+        setView(routeForUser(parsedUser));
+
+        // A session stored before behaviours existed has no behaviour on it.
+        // Resolve it once so a custom role still lands in the right place.
+        if (!parsedUser.behaviour) {
+          fetch(`${API}/api/roles`)
+            .then(r => r.json())
+            .then(d => {
+              const match = (d.roles || []).find(r => r.key === parsedUser.role);
+              if (!match) return;
+              const filled = { ...parsedUser, behaviour: match.behaviour };
+              setUser(filled);
+              localStorage.setItem('user', JSON.stringify(filled));
+              setView(routeForUser(filled));
+            })
+            .catch(() => {});
+        }
       } catch (err) {
         console.error('Failed to parse stored user, clearing it:', err);
         localStorage.removeItem('user');
@@ -193,7 +215,7 @@ export default function App() {
     setSessionExpired(null);
     setUser(loggedInUser);
     localStorage.setItem('user', JSON.stringify(loggedInUser));
-    setView(routeForRole(loggedInUser.role));
+    setView(routeForUser(loggedInUser));
   };
 
   const handleSignupSuccess = () => {

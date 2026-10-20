@@ -1,4 +1,9 @@
-# Deployment Guide — EGI Library System
+# Deployment Guide — EGI Library System (Vercel / Render / Supabase)
+
+> **Deploying to Bluehost? Use [BLUEHOST-DEPLOYMENT.md](BLUEHOST-DEPLOYMENT.md)
+> instead.** This file describes the three-host free-tier setup. It still
+> works, and Appendix B of the Bluehost guide falls back to the Render half of
+> it, but the two are different deployments — don't follow both.
 
 Frontend → **Vercel** · Backend → **Render** · Database + files → **Supabase**
 

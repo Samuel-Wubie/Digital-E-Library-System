@@ -4,6 +4,8 @@ import LibraryDashboard from './Dashboard';
 import OfficeDashboard from './OfficeDashboard';
 import NotificationBar from './NotificationBar';
 import MyRequests, { PENDING_STAGES } from './MyRequests';
+import Help from './Help';
+import Delegation from './Delegation';
 import libraryLogo from '../logo.png';
 
 const h = React.createElement;
@@ -27,22 +29,38 @@ function OfficeWorkspace({ user, setUser }) {
   const [reviewCount, setReviewCount] = useState(0);
   const [myPendingCount, setMyPendingCount] = useState(0);
 
-  const myStage = ROLE_TO_STAGE[user?.role];
+  // Which queues this person works: their own step, plus any they are
+  // covering for a colleague on leave. Asked of the server rather than
+  // derived from the role name — roles and steps are both administrator-
+  // defined now, and a stand-in has more than one queue.
+  const [myStages, setMyStages] = useState({ stages: [], delegated: [] });
+
+  useEffect(() => {
+    if (!user?.id) return;
+    fetch(`${API}/api/office-requests/my-stages?userId=${user.id}`)
+      .then(r => r.json())
+      .then(d => { if (d && Array.isArray(d.stages)) setMyStages(d); })
+      .catch(() => {});
+  }, [user, activeTab]);
 
   useEffect(() => {
     if (!user?.id) return;
     const refresh = () => {
-      // Requests from others sitting at MY review stage.
-      if (myStage) {
-        fetch(`${API}/api/office-requests?stage=${myStage}`)
-          .then(r => r.json())
-          .then(data => setReviewCount(
-            (Array.isArray(data) ? data : []).filter(r =>
-              String(r.makerId) !== String(user.id) &&
-              (!r.assignedReviewerId || String(r.assignedReviewerId) === String(user.id))
-            ).length
-          ))
-          .catch(() => {});
+      // Requests from others sitting at any stage this person can act on.
+      if (myStages.stages.length > 0) {
+        Promise.all(myStages.stages.map(st =>
+          fetch(`${API}/api/office-requests?stage=${st}`).then(r => r.json()).catch(() => [])
+        )).then(lists => {
+          const seen = new Set();
+          let n = 0;
+          lists.flat().forEach(r => {
+            if (!r || seen.has(r.id)) return;
+            seen.add(r.id);
+            if (String(r.makerId) !== String(user.id) &&
+                (!r.assignedReviewerId || String(r.assignedReviewerId) === String(user.id))) n += 1;
+          });
+          setReviewCount(n);
+        });
       }
       // MY requests still waiting for someone's acceptance.
       fetch(`${API}/api/office-requests?makerId=${user.id}`)
@@ -55,7 +73,7 @@ function OfficeWorkspace({ user, setUser }) {
     refresh();
     const interval = setInterval(refresh, 15000);
     return () => clearInterval(interval);
-  }, [user, myStage, activeTab]);
+  }, [user, myStages, activeTab]);
 
   // Safety Check: If user session data fails to resolve, render a clean error recovery UI
   if (!user) {
@@ -96,7 +114,9 @@ function OfficeWorkspace({ user, setUser }) {
       h('nav', { className: 'ow-side-nav' },
         navItem('library', 'Library Interface', 0),
         navItem('office', 'Office Dashboard Review', reviewCount),
-        navItem('myrequests', 'My Requests', myPendingCount)
+        navItem('myrequests', 'My Requests', myPendingCount),
+        navItem('delegation', 'Delegation', myStages.delegated.length),
+        navItem('help', 'Help & Manual', 0)
       ),
 
       h('div', { className: 'ow-side-footer' },
@@ -111,7 +131,9 @@ function OfficeWorkspace({ user, setUser }) {
     h('div', { className: 'ow-content' },
       activeTab === 'library' && h(LibraryDashboard, { user: user, setUser: setUser }),
       activeTab === 'office' && h(OfficeDashboard, { currentUser: user }),
-      activeTab === 'myrequests' && h(MyRequests, { user: user })
+      activeTab === 'myrequests' && h(MyRequests, { user: user }),
+      activeTab === 'delegation' && h(Delegation, { user: user }),
+      activeTab === 'help' && h(Help, { role: user.role, behaviour: user.behaviour })
     )
   );
 }

@@ -3,6 +3,7 @@ import './OfficeWorkspace.css';
 import LibraryDashboard from './Dashboard';
 import NotificationBar from './NotificationBar';
 import MyRequests, { PENDING_STAGES } from './MyRequests';
+import Help from './Help';
 import libraryLogo from '../logo.png';
 
 const h = React.createElement;
@@ -17,6 +18,17 @@ import { API } from '../config';
 function UserWorkspace({ user, setUser }) {
   const [activeTab, setActiveTab] = useState('library'); // 'library' | 'myrequests'
   const [myPendingCount, setMyPendingCount] = useState(0);
+  const [allowance, setAllowance] = useState(null);
+
+  // How many self-service downloads are left this month. Refreshed whenever
+  // the tab changes, so it is current after a download without a page reload.
+  useEffect(() => {
+    if (!user?.id) return;
+    fetch(`${API}/api/downloads/allowance?userId=${user.id}`)
+      .then(r => r.json())
+      .then(d => setAllowance(d && d.applies ? d : null))
+      .catch(() => {});
+  }, [user, activeTab]);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -64,7 +76,26 @@ function UserWorkspace({ user, setUser }) {
 
       h('nav', { className: 'ow-side-nav' },
         navItem('library', 'Library Interface', 0),
-        navItem('myrequests', 'My Requests', myPendingCount)
+        navItem('myrequests', 'My Requests', myPendingCount),
+        navItem('help', 'Help & Manual', 0)
+      ),
+
+      allowance && h('div', { className: 'ow-allowance' },
+        h('div', { className: 'ow-allowance-label' }, 'Downloads this month'),
+        h('div', { className: 'ow-allowance-value' },
+          `${allowance.remaining} of ${allowance.limit} left`
+        ),
+        h('div', { className: 'ow-allowance-bar' },
+          h('div', {
+            className: 'ow-allowance-fill',
+            style: { width: `${allowance.limit ? (allowance.used / allowance.limit) * 100 : 0}%` }
+          })
+        ),
+        h('div', { className: 'ow-allowance-note' },
+          allowance.remaining > 0
+            ? 'Pay the page fee and download straight away.'
+            : 'Further downloads need an officer to authorise them.'
+        )
       ),
 
       h('div', { className: 'ow-side-footer' },
@@ -78,7 +109,8 @@ function UserWorkspace({ user, setUser }) {
 
     h('div', { className: 'ow-content' },
       activeTab === 'library' && h(LibraryDashboard, { user: user, setUser: setUser }),
-      activeTab === 'myrequests' && h(MyRequests, { user: user })
+      activeTab === 'myrequests' && h(MyRequests, { user: user }),
+      activeTab === 'help' && h(Help, { role: user.role, behaviour: user.behaviour })
     )
   );
 }

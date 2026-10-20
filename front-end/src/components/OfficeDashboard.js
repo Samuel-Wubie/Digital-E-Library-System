@@ -44,13 +44,16 @@ const STAGE_LABEL = {
   rejected: 'Rejected',
 };
 
+// Fallbacks only, for the three steps the system shipped with. The live names
+// come from /api/workflow — these steps have been renamed (Maker, Checker,
+// Authorizer) and an administrator can add more, so nothing may read this.
 const STAGE_SHORT_LABEL = {
   officer: 'Officer',
   senior_officer: 'Sr. Officer',
   authorizer: 'Dept. Head',
 };
 
-const CLASS_LABELS = { normal: 'Normal', medium: 'Medium Restriction', strict: 'Strict / Secure' };
+const CLASS_LABELS = { normal: 'Public', medium: 'Confidential', strict: 'Highly Confidential' };
 
 // Fixed full chain for permission (add/edit/delete) requests. Download
 // requests instead use r.requiredStages, since that varies by security class.
@@ -78,23 +81,77 @@ function OfficeDashboard({ currentUser }) {
   // role argument here doesn't matter since we look up r.makerRole directly.
   const { matrix: accessMatrix } = usePermissions(currentUser?.role);
 
-  const myStage = ROLE_TO_STAGE[currentUser?.role];
+  // Every queue this person can work: their own step, plus any they are
+  // covering while a colleague is on leave. Resolved by the server, because
+  // roles and steps are administrator-defined and a stand-in has more than
+  // one queue.
+  const [myStages, setMyStages] = useState(null);
+
+  // The live chain, so step names on screen are the ones the administrator
+  // typed rather than the three the system shipped with.
+  const [workflowSteps, setWorkflowSteps] = useState([]);
+  useEffect(() => {
+    fetch(`${API}/api/workflow`)
+      .then(r => r.json())
+      .then(d => setWorkflowSteps(Array.isArray(d.steps) ? d.steps : []))
+      .catch(() => {});
+  }, []);
+  const stepLabel = (key) => {
+    const st = workflowSteps.find(s => s.key === key);
+    return (st && st.label) || STAGE_SHORT_LABEL[key] || key;
+  };
+
+  // The stage sequence for THIS request. Every request now stores the chain it
+  // was created with — which varies by action and by classification — so that
+  // is the first choice; the live chain and then the original three are only
+  // fallbacks for rows written before required_stages existed.
+  const chainFor = (r) => {
+    if (r.requiredStages && r.requiredStages.length > 0) return r.requiredStages;
+    if (workflowSteps.length > 0) return workflowSteps.map(s => s.key);
+    return PERMISSION_CHAIN;
+  };
+
+  useEffect(() => {
+    if (!currentUser?.id) return;
+    fetch(`${API}/api/office-requests/my-stages?userId=${currentUser.id}`)
+      .then(r => r.json())
+      .then(d => setMyStages(d && Array.isArray(d.stages) ? d : { stages: [], delegated: [] }))
+      .catch(() => setMyStages({ stages: [], delegated: [] }));
+  }, [currentUser]);
+
+  const myStage = myStages?.ownStage || null;
+  const stages = myStages?.stages || [];
+  const delegated = myStages?.delegated || [];
 
   const fetchRequests = useCallback(() => {
-    if (!myStage) {
-      setError(`Your role (${currentUser?.role || 'unknown'}) does not review requests in the Office Dashboard.`);
+    if (!myStages) return;                 // still resolving
+    if (stages.length === 0) {
+      // Not about the role any more: a step belongs to the people named on it,
+      // so the reason there is no queue is that nobody named this person.
+      setError('You are not assigned to any approval step, so there is nothing here to review. An administrator assigns people to steps under Roles & workflow.');
       setLoading(false);
       return;
     }
     setLoading(true);
     setError('');
-    fetch(`${API}/api/office-requests?stage=${myStage}`)
-      .then(res => res.json())
-      .then(data => {
-        // Only show requests addressed to ME (or to nobody in particular).
-        const mine = (Array.isArray(data) ? data : []).filter(r =>
-          !r.assignedReviewerId || String(r.assignedReviewerId) === String(currentUser.id)
-        );
+    Promise.all(stages.map(st =>
+      fetch(`${API}/api/office-requests?stage=${st}`).then(r => r.json()).catch(() => [])
+    ))
+      .then(lists => {
+        // One request can only sit at one stage, but de-duplicate anyway so a
+        // repeated stage in the list cannot show the same row twice.
+        const seen = new Set();
+        const mine = [];
+        lists.flat().forEach(r => {
+          if (!r || seen.has(r.id)) return;
+          seen.add(r.id);
+          // Addressed to me, to nobody in particular, or to the colleague I
+          // am covering for.
+          const assignedElsewhere = r.assignedReviewerId &&
+            String(r.assignedReviewerId) !== String(currentUser.id);
+          if (assignedElsewhere && !delegated.length) return;
+          mine.push(r);
+        });
         setPendingRequests(mine);
         setLoading(false);
       })
@@ -103,7 +160,7 @@ function OfficeDashboard({ currentUser }) {
         setError('Could not load requests. Please try again.');
         setLoading(false);
       });
-  }, [myStage, currentUser]);
+  }, [myStages, stages, delegated, currentUser]);
 
   useEffect(() => { fetchRequests(); }, [fetchRequests]);
 
@@ -112,7 +169,7 @@ function OfficeDashboard({ currentUser }) {
   // each terminal/forward stage and filter client-side by the matching
   // reviewer-id column for this role.
   useEffect(() => {
-    if (activeTab !== 'history' || !myStage) return;
+    if (activeTab !== 'history' || stages.length === 0) return;
     setLoading(true);
     Promise.all([
       fetch(`${API}/api/office-requests?stage=approved`).then(r => r.json()),
@@ -129,7 +186,7 @@ function OfficeDashboard({ currentUser }) {
       console.error('Failed to load history:', err);
       setLoading(false);
     });
-  }, [activeTab, myStage, currentUser]);
+  }, [activeTab, stages, myStage, currentUser]);
 
   const handleAccept = async (r) => {
     setActionError('');
@@ -138,27 +195,28 @@ function OfficeDashboard({ currentUser }) {
     // the reviewer must pick the specific person at the next stage —
     // exactly like the maker did when submitting.
     let nextReviewerId = null;
-    const chain = r.requestType === 'download' && r.requiredStages && r.requiredStages.length > 0
-      ? r.requiredStages
-      : PERMISSION_CHAIN;
+    const chain = chainFor(r);
     const idx = chain.indexOf(r.stage);
     const isFinal = idx === -1 || idx === chain.length - 1;
 
     if (!isFinal) {
       const nextStage = chain[idx + 1];
-      const fallbackRoles = { officer: 'Officer', senior_officer: 'Senior Officer', authorizer: 'Department Head' };
-      const nextRole = (r.config && r.config[nextStage]) || fallbackRoles[nextStage];
+      // Who staffs the next step, asked of the workflow. This used to list
+      // everyone holding that step's role, which named the wrong people as
+      // soon as a step belonged to named staff instead of a job title.
+      const nextLabel = stepLabel(nextStage);
       try {
-        const usersRes = await fetch(`${API}/api/users/by-role?role=${encodeURIComponent(nextRole)}`);
-        const users = await usersRes.json();
-        const options = (usersRes.ok && Array.isArray(users) ? users : [])
+        const staffRes = await fetch(`${API}/api/workflow/step-staff?stepKey=${encodeURIComponent(nextStage)}`);
+        const payload = await staffRes.json();
+        const staff = staffRes.ok && Array.isArray(payload.staff) ? payload.staff : [];
+        const options = staff
           .filter(u => String(u.id) !== String(currentUser.id))
           .map(u => ({ value: String(u.id), label: u.full_name ? `${u.full_name} (@${u.username})` : `@${u.username}` }));
         if (options.length > 0) {
           const picked = await askSelect({
             title: 'Forward Request',
-            message: `${r.requestCode} — accept and forward to which ${nextRole}?`,
-            label: `Send to (${nextRole})`,
+            message: `${r.requestCode} — accept and forward to whom for ${nextLabel}?`,
+            label: `Send to (${nextLabel})`,
             options,
           });
           if (!picked) return; // cancelled
@@ -215,12 +273,8 @@ function OfficeDashboard({ currentUser }) {
 
   // --- Render helpers (React.createElement only, no JSX) ---
 
-  // chain: the actual stage sequence for THIS request (varies for
-  // downloads by security class; fixed for permission requests).
   const renderPipeline = (r) => {
-    const chain = r.requestType === 'download' && r.requiredStages && r.requiredStages.length > 0
-      ? r.requiredStages
-      : PERMISSION_CHAIN;
+    const chain = chainFor(r);
     const reqIdx = chain.indexOf(r.stage); // -1 once stage is 'approved' or 'rejected'
 
     const children = [];
@@ -231,7 +285,7 @@ function OfficeDashboard({ currentUser }) {
       else if (i < reqIdx) state = 'done';
       else if (i === reqIdx) state = 'current';
 
-      children.push(h('span', { className: 'od-pipe-label', key: `label-${stageName}` }, STAGE_SHORT_LABEL[stageName] || stageName));
+      children.push(h('span', { className: 'od-pipe-label', key: `label-${stageName}` }, stepLabel(stageName)));
       children.push(h('span', { className: `od-pipe-dot od-pipe-dot--${state}`, key: `dot-${stageName}` }));
       if (i < chain.length - 1) {
         children.push(h('span', { className: 'od-pipe-line', key: `line-${stageName}` }));
@@ -265,7 +319,7 @@ function OfficeDashboard({ currentUser }) {
   const renderDownloadContext = (r) => {
     if (r.requestType !== 'download') return null;
     return h('div', { className: 'od-download-context' },
-      h('span', { className: 'od-download-class' }, CLASS_LABELS[r.securityClass] || r.securityClass || 'Normal'),
+      h('span', { className: 'od-download-class' }, CLASS_LABELS[r.securityClass] || r.securityClass || 'Public'),
       r.totalFee != null && h('span', { className: 'od-download-fee' },
         `${formatBirr(r.totalFee)} (${r.pageCount ?? '?'} pages @ ${formatBirr(r.feePerPage)}/page)`),
       r.paymentStatus && h('span', { className: `od-download-payment od-download-payment--${r.paymentStatus}` },
@@ -353,9 +407,11 @@ function OfficeDashboard({ currentUser }) {
 
   const list = activeTab === 'pending' ? pendingRequests : historyRequests;
 
-  if (!myStage) {
+  // Someone covering for a colleague has queues even though their own role
+  // may staff no step, so this guards on the full list.
+  if (stages.length === 0) {
     return h('div', { className: 'office-dashboard-root' },
-      h('div', { className: 'od-empty-state' }, error)
+      h('div', { className: 'od-empty-state' }, error || 'Loading\u2026')
     );
   }
 
@@ -363,8 +419,21 @@ function OfficeDashboard({ currentUser }) {
     h('div', { className: 'od-header' },
       h('div', null,
         h('h1', { className: 'od-title' }, 'Office Dashboard'),
+        // The step, not the job title: a person is named on a step, and that
+        // is what decides what appears below.
         h('p', { className: 'od-subtitle' },
-          `Reviewing as ${currentUser.role} \u2014 ${currentUser.username}`
+          myStage
+            ? `Reviewing ${myStages.ownStageLabel || stepLabel(myStage)} \u2014 ${currentUser.username}`
+            : `Reviewing \u2014 ${currentUser.username}`
+        ),
+        // Say plainly whose queue is mixed in, so a decision taken on someone
+        // else's behalf is never taken by accident.
+        delegated.length > 0 && h('div', { className: 'od-delegation-banner' },
+          delegated.map(d =>
+            h('div', { key: d.stage },
+              `Also covering ${d.stageLabel} for ${d.fromName} until ${String(d.endsOn).slice(0, 10)}`
+            )
+          )
         )
       )
     ),

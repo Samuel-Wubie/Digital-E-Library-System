@@ -6,6 +6,11 @@ node_modules/
 *.env
 !.env.example
 
+# Exception: Vite bakes VITE_* values into the browser bundle, so nothing in
+# this file can be secret by definition. It holds one empty variable and it
+# must be committed, or a production build silently points at localhost.
+!front-end/.env.production
+
 # Build output
 front-end/build/
 front-end/dist/
@@ -28,3 +33,7 @@ back-end/*.rtf
 # OS junk
 .DS_Store
 Thumbs.db
+
+# Unrelated coursework that happens to sit in back-end/
+back-end/datascience1.py
+back-end/iris_plot.png

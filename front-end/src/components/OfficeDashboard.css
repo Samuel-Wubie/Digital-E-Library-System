@@ -387,3 +387,13 @@
     grid-template-columns: 1fr;
   }
 }
+/* Shown when this person is also working a colleague's queue while they are
+   on leave — a decision taken on someone else's behalf should never be a
+   surprise. */
+.od-delegation-banner {
+  margin-top: 0.5rem;
+  display: flex; flex-direction: column; gap: 0.2rem;
+  font-size: 0.75rem; line-height: 1.4; color: #92400e;
+  background: #fffbeb; border-left: 3px solid #fcd34d;
+  border-radius: 6px; padding: 0.45rem 0.7rem;
+}

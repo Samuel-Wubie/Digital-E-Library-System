@@ -1,0 +1,146 @@
+/* ============================================================================
+   HELP & USER MANUAL
+   Shown inside all three workspaces, so it sets its own type and spacing
+   rather than inheriting whichever shell it happens to be mounted in.
+   ============================================================================ */
+
+.help-root {
+  max-width: 820px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: #334155;
+  box-sizing: border-box;
+}
+.help-root *, .help-root *::before, .help-root *::after { box-sizing: border-box; }
+
+.help-head { margin-bottom: 1.25rem; }
+.help-head h2 {
+  font-size: 1.25rem; font-weight: 600; color: #0f172a; margin: 0 0 0.3rem;
+}
+.help-head p {
+  font-size: 0.875rem; color: #64748b; margin: 0 0 0.6rem; line-height: 1.5;
+}
+.help-role {
+  display: inline-block; font-size: 0.75rem; color: #475569;
+  background: #f1f5f9; border-radius: 999px; padding: 0.2rem 0.65rem;
+}
+.help-role strong { font-weight: 600; color: #0f172a; }
+
+/* --- search ---------------------------------------------------------------
+   The manual got long enough that browsing it stopped being the fast path.
+   Searching matches step bodies as well as titles, so the words someone would
+   actually type ("expired", "rejected") find the right step. */
+.help-search { margin-bottom: 1rem; }
+.help-search input {
+  width: 100%;
+  font-family: inherit; font-size: 0.875rem; color: #334155;
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 8px;
+  padding: 0.55rem 0.75rem;
+}
+.help-search input::placeholder { color: #94a3b8; }
+.help-search input:focus {
+  outline: none; border-color: #2a78d6; box-shadow: 0 0 0 3px rgba(42, 120, 214, 0.12);
+}
+.help-search-count {
+  display: block; margin-top: 0.4rem;
+  font-size: 0.75rem; color: #64748b;
+}
+
+/* --- contents -------------------------------------------------------------
+   A flat jump list rather than a sidebar: there are enough sections to need
+   one, and not so many that they need grouping. */
+.help-contents {
+  display: flex; flex-wrap: wrap; gap: 0.35rem;
+  margin-bottom: 1.25rem;
+}
+.help-contents-link {
+  font-family: inherit; font-size: 0.75rem; cursor: pointer;
+  color: #475569; background: #f8fafc;
+  border: 1px solid #e2e8f0; border-radius: 999px;
+  padding: 0.25rem 0.7rem;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+.help-contents-link:hover { background: #eff6ff; border-color: #bfdbfe; color: #1c5cab; }
+
+.help-empty {
+  padding: 1.25rem 1rem; margin-bottom: 0.75rem;
+  font-size: 0.8125rem; line-height: 1.5; color: #64748b;
+  background: #f8fafc; border: 1px dashed #cbd5e1; border-radius: 8px;
+}
+
+/* --- collapsible sections --- */
+.help-card {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  margin-bottom: 0.625rem;
+  overflow: hidden;
+}
+.help-card--open { border-color: #cbd5e1; }
+
+.help-card-head {
+  width: 100%;
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  background: none; border: none; cursor: pointer; text-align: left;
+  padding: 0.875rem 1rem;
+  font-family: inherit; font-size: 0.9375rem; font-weight: 600; color: #0f172a;
+  transition: background-color 0.15s ease;
+}
+.help-card-head:hover { background: #f8fafc; }
+
+/* The one-line summary under each section title, so the collapsed list says
+   what is inside rather than making people open all of them to find out. */
+.help-card-title { display: block; min-width: 0; }
+.help-card-intro {
+  display: block; margin-top: 0.15rem;
+  font-size: 0.75rem; font-weight: 400; color: #64748b; line-height: 1.45;
+}
+
+.help-chevron {
+  flex-shrink: 0;
+  width: 1.5rem; height: 1.5rem; line-height: 1.4rem; text-align: center;
+  border-radius: 6px; background: #f1f5f9; color: #475569;
+  font-size: 1rem; font-weight: 500;
+}
+
+/* --- numbered steps --- */
+.help-steps {
+  list-style: none; margin: 0; padding: 0 1rem 1rem;
+  display: flex; flex-direction: column; gap: 0.875rem;
+}
+.help-steps li { display: flex; gap: 0.75rem; align-items: flex-start; }
+
+.help-step-num {
+  flex-shrink: 0;
+  width: 1.5rem; height: 1.5rem; line-height: 1.5rem; text-align: center;
+  border-radius: 999px; background: #eff6ff; color: #2a78d6;
+  font-size: 0.75rem; font-weight: 600;
+}
+.help-step-heading {
+  font-size: 0.875rem; font-weight: 600; color: #1e293b; margin-bottom: 0.15rem;
+}
+.help-step-text { min-width: 0; }
+.help-step-body {
+  font-size: 0.8125rem; line-height: 1.55; color: #475569;
+}
+
+/* The thing people get wrong. Pulled out of the paragraph on purpose —
+   buried in body text it goes unread, which is how the mistake keeps
+   happening. */
+.help-step-note {
+  margin-top: 0.4rem; padding: 0.45rem 0.65rem;
+  font-size: 0.75rem; line-height: 1.5; color: #92400e;
+  background: #fffbeb; border-left: 3px solid #fcd34d; border-radius: 6px;
+}
+
+.help-foot {
+  margin-top: 1.25rem; padding: 0.75rem 1rem;
+  font-size: 0.8125rem; line-height: 1.5; color: #64748b;
+  background: #f8fafc; border-left: 3px solid #cbd5e1; border-radius: 6px;
+}
+
+@media (max-width: 640px) {
+  .help-root { padding: 1rem 0.875rem 2rem; }
+  .help-card-head { font-size: 0.875rem; }
+}

@@ -43,9 +43,9 @@ import { API } from '../config';
 // ============================================================================
 
 const CLASS_LABELS = {
-  normal: 'Normal',
-  medium: 'Medium Restriction',
-  strict: 'Strict / Secure',
+  normal: 'Public',
+  medium: 'Confidential',
+  strict: 'Highly Confidential',
 };
 
 const CLASS_BADGE_CLASS = {
@@ -94,6 +94,7 @@ const UserDashboard = ({ user, setUser }) => {
     title: '', author: '', subject: '', callNumber: '', department: '', location: '', year: ''
   });
   const [viewModal, setViewModal] = useState(false);
+  const [previewUrl, setPreviewUrl] = useState(null);
   const [selectedBook, setSelectedBook] = useState(null);
 
   // --- DOWNLOAD WORKFLOW STATE ---
@@ -454,15 +455,35 @@ const UserDashboard = ({ user, setUser }) => {
     if (success) { setShowModal(false); setSelectedFile(null); }
   };
 
-  const openViewPreview = (book) => {
-    if (book.file_path) { setSelectedBook(book); setViewModal(true); }
-    else { alert("No PDF associated with this record."); }
+  // Ask the backend for a preview link instead of building /uploades/<filename>
+  // directly. That old path only worked because every stored file was served
+  // unguarded; it is now gated, so the URL has to come from the server, which
+  // checks the caller first. Matches Dashboard.js.
+  const openViewPreview = async (book) => {
+    if (!book.file_path) { alert("No PDF associated with this record."); return; }
+    try {
+      const res = await fetch(`${API}/api/books/${book.id}/preview?userId=${user.id}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        alert(body.message || 'Could not open this document.');
+        return;
+      }
+      const { url } = await res.json();
+      // A relative path needs the API base in front; a signed remote URL
+      // already carries its own host.
+      setPreviewUrl(url.startsWith('http') ? url : `${API}${url}`);
+      setSelectedBook(book);
+      setViewModal(true);
+    } catch (err) {
+      console.error('Preview failed:', err);
+      alert('Could not open this document.');
+    }
   };
 
   // --- RENDER HELPERS ---
 
   const renderClassBadge = (cls) =>
-    h('span', { className: CLASS_BADGE_CLASS[cls] || CLASS_BADGE_CLASS.normal }, CLASS_LABELS[cls] || 'Normal');
+    h('span', { className: CLASS_BADGE_CLASS[cls] || CLASS_BADGE_CLASS.normal }, CLASS_LABELS[cls] || 'Public');
 
   const renderDownloadButtonLabel = (book) => {
     const cls = getSecurityClass(book);
@@ -776,7 +797,7 @@ const UserDashboard = ({ user, setUser }) => {
     ),
 
     // PREVIEW MODAL (unchanged from Dashboard.js)
-    viewModal && selectedBook && h('div', { className: 'modal-overlay' },
+    viewModal && selectedBook && previewUrl && h('div', { className: 'modal-overlay' },
       h('div', { className: 'modal-content modal-content--viewer', style: { maxWidth: '1100px', width: '95%', display: 'flex', flexDirection: 'column' } },
         h('div', { className: 'viewer-header' },
           h('h3', { style: { margin: 0, color: '#1e293b' } }, `Document Full View: ${selectedBook.title}`),
@@ -784,14 +805,14 @@ const UserDashboard = ({ user, setUser }) => {
         ),
         h('div', { className: 'document-scroll-container', style: { position: 'relative', height: '80vh', backgroundColor: '#525659', marginTop: '10px', borderRadius: '4px', overflow: 'hidden' } },
           h('object', {
-            data: `${API}/uploades/${selectedBook.file_path}#toolbar=1&navpanes=1`,
+            data: `${previewUrl}#toolbar=1&navpanes=1`,
             type: 'application/pdf',
             width: '100%',
             height: '100%',
             style: { border: 'none' }
           },
             h('iframe', {
-              src: `${API}/uploades/${selectedBook.file_path}#toolbar=1&navpanes=1`,
+              src: `${previewUrl}#toolbar=1&navpanes=1`,
               title: 'PDF Fallback Full View',
               width: '100%',
               height: '100%',

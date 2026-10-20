@@ -408,102 +408,126 @@
   outline: none;
   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3);
 }
-
 /* ============================================================================
-   TOP DOWNLOADED DOCUMENTS — vertical coloured column chart
-   One colour per document, drawn from the fixed 8-slot order in
-   BAR_COLORS (admindashboard.js). The colour is keyed on the document
-   TITLE, not its rank, so re-sorting never repaints the chart.
+   TOP DOWNLOADED DOCUMENTS — coloured column chart
+   One column per document, tallest first. Each document keeps its own hue,
+   keyed on its TITLE in admindashboard.js, so a re-sort never repaints the
+   chart and "the green one" stays the green one.
+
+   The eight hues are validated for colour-blind separation. Three of them sit
+   below 3:1 contrast against white, so the count above each column and the
+   title beneath it are not decoration — they are what keeps those columns
+   readable. Do not remove them.
    ============================================================================ */
 
 .admin-dashboard-root .topdocs-body {
-  padding: 1.75rem 1.25rem 1.25rem;
+  padding: 1.5rem 1.25rem 1.25rem;
+  overflow-x: auto;           /* many documents scroll sideways, never squash */
 }
 
+/* Aligned at the TOP, not the bottom: every plot box is the same height, so
+   top alignment is what puts all five baselines on one line. Bottom-aligning
+   them lets a two-line title under one column shove its baseline up, and a
+   column chart whose bars do not share a baseline cannot be compared. */
 .admin-dashboard-root .topdocs-columns {
+  position: relative;
   display: flex;
-  align-items: flex-end;
-  justify-content: space-between;
-  gap: 0;   /* zero, so each column's baseline segment joins into one line */
+  align-items: flex-start;
+  gap: 1.25rem;               /* well past the 2px minimum between marks */
+  min-width: min-content;
+  padding-bottom: 0.25rem;
+}
+
+/* One continuous axis under all the columns. Drawn here rather than on each
+   plot box, because a border per column leaves a gap between every pair and
+   reads as five little charts instead of one. Sits at the plot height, which
+   is why the two must change together. */
+.admin-dashboard-root .topdocs-columns::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 190px;
+  height: 1px;
+  background-color: #e2e8f0;  /* hairline, one step off the surface */
 }
 
 .admin-dashboard-root .topdocs-col {
-  flex: 1 1 0;
-  min-width: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
-  border-radius: 8px 8px 0 0;
-  padding: 0;   /* zero, so adjacent baseline segments meet as one line */
-  transition: background-color 0.15s ease;
+  flex: 1 1 0;
+  min-width: 5.5rem;
+  max-width: 9rem;
 }
 
-.admin-dashboard-root .topdocs-col:hover {
-  background-color: #f8fafc;
-}
-
-/* Value sits above its column — visible on every bar, which is what keeps
-   the lighter hues readable against white. Do not remove. */
+/* Value on the cap. The bar owns the percentage height, so the number is
+   pushed up by the bar rather than competing with it for the same space —
+   that is what keeps the shortest column from hiding under its own label. */
 .admin-dashboard-root .topdocs-col-value {
   font-size: 0.8125rem;
   font-weight: 600;
-  color: #334155;
-  margin-bottom: 0.375rem;
+  color: #334155;             /* text token, never the series colour */
   font-variant-numeric: tabular-nums;
+  line-height: 1;
+  padding-bottom: 0.3rem;
+  flex-shrink: 0;
 }
 
-/* Fixed-height plot area; the bar grows upward from the baseline. */
+/* The plot area. Fixed height so each bar's percentage has something to
+   measure against, and a hairline baseline for the columns to stand on. */
 .admin-dashboard-root .topdocs-col-plot {
   width: 100%;
-  height: 180px;
+  height: 190px;
   display: flex;
-  align-items: flex-end;
-  justify-content: center;
-  /* The baseline the columns stand on. Lives here, under the bars —
-     not under the labels. */
-  border-bottom: 1px solid #cbd5e1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: flex-end;   /* bar sits on the baseline, count above it */
 }
 
 .admin-dashboard-root .topdocs-col-bar {
   width: 100%;
-  max-width: 88px;
-  border-radius: 6px 6px 0 0;   /* rounded data-end, square on the baseline */
+  max-width: 24px;            /* capped: the band's leftover stays as air */
+  flex: 0 0 auto;
+  border-radius: 4px 4px 0 0; /* rounded cap, square on the baseline */
+  min-height: 4px;
   transition: height 0.45s cubic-bezier(0.4, 0, 0.2, 1);
 }
 
-/* --- Labels below the baseline --- */
+@media (prefers-reduced-motion: reduce) {
+  .admin-dashboard-root .topdocs-col-bar { transition: none; }
+}
+
 .admin-dashboard-root .topdocs-col-foot {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 0.2rem;
-  padding: 0.625rem 0.5rem 0;
+  gap: 0.15rem;
+  padding-top: 0.625rem;
   width: 100%;
-  min-width: 0;
+  text-align: center;
 }
 
+/* Rank is a real sequence here — the chart is sorted by downloads. */
 .admin-dashboard-root .topdocs-col-rank {
-  font-size: 0.6875rem;
+  font-size: 0.625rem;
   font-weight: 600;
   color: #94a3b8;
-  line-height: 1;
+  font-variant-numeric: tabular-nums;
 }
 
-/* Titles are long, so wrap to two lines and ellipsise the rest. The full
-   title is in the column's tooltip. */
+/* Long titles wrap to two lines rather than being cut mid-word. */
 .admin-dashboard-root .topdocs-col-title {
   font-size: 0.75rem;
   font-weight: 500;
   color: #334155;
-  text-align: center;
-  line-height: 1.3;
+  line-height: 1.35;
   display: -webkit-box;
   -webkit-line-clamp: 2;
+  line-clamp: 2;
   -webkit-box-orient: vertical;
   overflow: hidden;
   overflow-wrap: anywhere;
-  width: 100%;
-  min-height: 2.1rem;   /* reserve two lines so dept pills align */
 }
 
 .admin-dashboard-root .topdocs-col-dept {
@@ -512,15 +536,538 @@
   background-color: #f1f5f9;
   padding: 0.1rem 0.45rem;
   border-radius: 999px;
-  white-space: nowrap;
+  margin-top: 0.1rem;
   max-width: 100%;
   overflow: hidden;
   text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
-@media (max-width: 720px) {
-  .admin-dashboard-root .topdocs-col-plot  { height: 130px; }
-  .admin-dashboard-root .topdocs-col-title { font-size: 0.6875rem; }
-  .admin-dashboard-root .topdocs-col-dept  { display: none; }
-  .admin-dashboard-root .topdocs-body      { padding: 1.25rem 0.75rem 1rem; }
+/* Hover dims the rest so one column stands out; the native title attribute
+   carries the full detail for anything the labels had to shorten. */
+.admin-dashboard-root .topdocs-columns:hover .topdocs-col {
+  opacity: 0.55;
+  transition: opacity 0.15s ease;
 }
+.admin-dashboard-root .topdocs-columns:hover .topdocs-col:hover {
+  opacity: 1;
+}
+
+@media (max-width: 640px) {
+  .admin-dashboard-root .topdocs-body { padding: 1.25rem 1rem 1rem; }
+  .admin-dashboard-root .topdocs-columns { gap: 0.875rem; }
+  .admin-dashboard-root .topdocs-col { min-width: 4.5rem; }
+  .admin-dashboard-root .topdocs-col-plot { height: 160px; }
+  .admin-dashboard-root .topdocs-columns::after { top: 160px; }
+  .admin-dashboard-root .topdocs-col-dept { display: none; }
+}
+
+/* ============================================================================
+   LIBRARY STRUCTURE TAB
+   Two panels: the categories on the left, what is inside the selected one on
+   the right. Hidden entries stay visible to the admin, dimmed, so they can be
+   brought back — nothing here is ever deleted.
+   ============================================================================ */
+
+.admin-dashboard-root .ls-layout {
+  display: grid;
+  grid-template-columns: minmax(260px, 340px) 1fr;
+  gap: 1rem;
+  align-items: start;
+}
+
+.admin-dashboard-root .ls-panel {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  overflow: hidden;
+}
+
+.admin-dashboard-root .ls-panel-head,
+.admin-dashboard-root .ls-sublist-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.75rem 1rem;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #0f172a;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.admin-dashboard-root .ls-add-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #2a78d6;
+  background: #eff6ff;
+  border: 1px solid #dbeafe;
+  border-radius: 999px;
+  padding: 0.2rem 0.6rem;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.admin-dashboard-root .ls-add-btn:hover { background: #dbeafe; }
+
+/* --- category rows --- */
+.admin-dashboard-root .ls-list { padding: 0.5rem; display: flex; flex-direction: column; gap: 0.125rem; }
+
+.admin-dashboard-root .ls-row {
+  display: flex;
+  align-items: center;
+  gap: 0.625rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background-color 0.15s ease;
+}
+.admin-dashboard-root .ls-row:hover { background: #f8fafc; }
+.admin-dashboard-root .ls-row--active { background: #eff6ff; }
+.admin-dashboard-root .ls-row--hidden { opacity: 0.55; }
+
+.admin-dashboard-root .ls-row-icon { font-size: 1.1rem; flex-shrink: 0; }
+.admin-dashboard-root .ls-row-main  { flex: 1 1 auto; min-width: 0; }
+.admin-dashboard-root .ls-row-label {
+  font-size: 0.8125rem; font-weight: 500; color: #334155;
+  display: flex; align-items: center; gap: 0.375rem;
+}
+.admin-dashboard-root .ls-row-sub   { font-size: 0.6875rem; color: #94a3b8; margin-top: 0.1rem; }
+
+.admin-dashboard-root .ls-tag {
+  font-size: 0.625rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.03em;
+  color: #92400e; background: #fef3c7; border-radius: 999px; padding: 0.05rem 0.4rem;
+}
+
+.admin-dashboard-root .ls-row-actions,
+.admin-dashboard-root .ls-chip button {
+  display: flex; gap: 0.125rem; flex-shrink: 0;
+}
+.admin-dashboard-root .ls-row-actions button,
+.admin-dashboard-root .ls-chip button {
+  background: transparent; border: none; cursor: pointer;
+  color: #94a3b8; padding: 0.25rem; border-radius: 6px; line-height: 0;
+  transition: background-color 0.15s ease, color 0.15s ease;
+}
+.admin-dashboard-root .ls-row-actions button:hover,
+.admin-dashboard-root .ls-chip button:hover { background: #e2e8f0; color: #334155; }
+
+/* --- the lists inside a category --- */
+.admin-dashboard-root .ls-sublist { border-bottom: 1px solid #f8fafc; }
+.admin-dashboard-root .ls-sublist:last-child { border-bottom: none; }
+
+.admin-dashboard-root .ls-chip-grid {
+  display: flex; flex-wrap: wrap; gap: 0.375rem; padding: 0.75rem 1rem 1rem;
+}
+
+.admin-dashboard-root .ls-chip {
+  display: inline-flex; align-items: center; gap: 0.375rem;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 999px;
+  padding: 0.2rem 0.3rem 0.2rem 0.65rem;
+  font-size: 0.75rem; color: #334155; max-width: 100%;
+}
+.admin-dashboard-root .ls-chip--hidden { opacity: 0.5; border-style: dashed; }
+
+.admin-dashboard-root .ls-chip-code {
+  font-size: 0.625rem; font-weight: 600; color: #64748b;
+  background: #e2e8f0; border-radius: 4px; padding: 0.05rem 0.3rem;
+  font-variant-numeric: tabular-nums;
+}
+.admin-dashboard-root .ls-chip-label {
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 15rem;
+}
+
+.admin-dashboard-root .ls-empty,
+.admin-dashboard-root .ls-empty-small {
+  color: #94a3b8; font-size: 0.8125rem; padding: 1.25rem 1rem;
+}
+.admin-dashboard-root .ls-empty-small { padding: 0.5rem 1rem 1rem; font-size: 0.75rem; }
+
+.admin-dashboard-root .ls-error {
+  background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
+  border-radius: 8px; padding: 0.625rem 0.875rem; font-size: 0.8125rem;
+}
+
+/* Shown when the roles list is the built-in fallback rather than the table.
+   Deliberately loud: the screen it sits above looks completely normal, which
+   is exactly the problem. */
+/* Setting a name that was never captured. Deliberately plain — it is a repair
+   tool inside a read-only panel, not a feature to show off. */
+.admin-dashboard-root .acct-name-btn {
+  margin-top: 0.1rem; font-size: 0.75rem; font-family: inherit; cursor: pointer;
+  color: #2a78d6; background: #eff6ff; border: 1px solid #dbeafe;
+  border-radius: 6px; padding: 0.3rem 0.65rem;
+}
+.admin-dashboard-root .acct-name-btn:hover { background: #dbeafe; }
+
+.admin-dashboard-root .acct-name-edit {
+  margin-top: 0.5rem; padding: 0.75rem;
+  background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px;
+}
+.admin-dashboard-root .acct-name-edit-row { display: flex; gap: 0.5rem; }
+.admin-dashboard-root .acct-name-edit-row label { flex: 1 1 0; min-width: 0; }
+.admin-dashboard-root .acct-name-edit-row span {
+  display: block; font-size: 0.6875rem; color: #64748b; margin-bottom: 0.2rem;
+}
+.admin-dashboard-root .acct-name-edit-row input {
+  width: 100%; font-family: inherit; font-size: 0.8125rem; color: #334155;
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 6px;
+  padding: 0.35rem 0.5rem;
+}
+.admin-dashboard-root .acct-name-edit-actions {
+  display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.625rem;
+}
+.admin-dashboard-root .acct-name-edit-actions button {
+  font-family: inherit; font-size: 0.75rem; cursor: pointer;
+  border-radius: 6px; padding: 0.35rem 0.8rem;
+}
+.admin-dashboard-root .acct-name-cancel {
+  color: #475569; background: #fff; border: 1px solid #e2e8f0;
+}
+.admin-dashboard-root .acct-name-save {
+  color: #fff; background: #2a78d6; border: 1px solid #2a78d6;
+}
+.admin-dashboard-root .acct-name-save:disabled { background: #cbd5e1; border-color: #cbd5e1; cursor: not-allowed; }
+
+@media (max-width: 560px) {
+  .admin-dashboard-root .acct-name-edit-row { flex-direction: column; gap: 0.5rem; }
+}
+
+.admin-dashboard-root .rw-degraded {
+  display: flex; flex-direction: column; gap: 0.3rem;
+  background: #fffbeb; border: 1px solid #fcd34d;
+  border-radius: 8px; padding: 0.75rem 0.875rem;
+  font-size: 0.8125rem; line-height: 1.5; color: #92400e;
+  margin-bottom: 0.25rem;
+}
+.admin-dashboard-root .rw-degraded strong { font-weight: 600; color: #78350f; }
+.admin-dashboard-root .rw-degraded-reason {
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.6875rem; color: #78350f;
+  background: #fef3c7; border-radius: 4px;
+  padding: 0.3rem 0.45rem; margin-top: 0.15rem;
+  overflow-wrap: anywhere;
+}
+
+/* --- the add/edit form --- */
+.admin-dashboard-root .ls-field { display: block; margin-bottom: 0.875rem; }
+.admin-dashboard-root .ls-field > span {
+  display: block; font-size: 0.75rem; font-weight: 500; color: #475569; margin-bottom: 0.25rem;
+}
+.admin-dashboard-root .ls-field input,
+.admin-dashboard-root .ls-field select { width: 100%; }
+
+.admin-dashboard-root .ls-note {
+  font-size: 0.75rem; color: #64748b; background: #f8fafc;
+  border-left: 3px solid #cbd5e1; border-radius: 4px; padding: 0.5rem 0.75rem;
+}
+
+@media (max-width: 900px) {
+  .admin-dashboard-root .ls-layout { grid-template-columns: 1fr; }
+}
+
+/* ============================================================================
+   DOWNLOAD REPORT
+   ============================================================================ */
+
+.admin-dashboard-root .rep-controls {
+  display: flex; flex-wrap: wrap; align-items: flex-end; gap: 0.75rem;
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 0.75rem; padding: 0.875rem 1rem;
+}
+
+.admin-dashboard-root .rep-field { display: flex; flex-direction: column; gap: 0.25rem; }
+.admin-dashboard-root .rep-field > span {
+  font-size: 0.6875rem; font-weight: 500; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em;
+}
+.admin-dashboard-root .rep-field input,
+.admin-dashboard-root .rep-field select {
+  border: 1px solid #e2e8f0; border-radius: 6px; padding: 0.35rem 0.5rem; font-size: 0.8125rem; color: #334155;
+}
+
+.admin-dashboard-root .rep-presets { display: flex; gap: 0.25rem; }
+.admin-dashboard-root .rep-presets button {
+  font-size: 0.75rem; color: #475569; background: #f1f5f9; border: 1px solid #e2e8f0;
+  border-radius: 999px; padding: 0.3rem 0.7rem; cursor: pointer;
+}
+.admin-dashboard-root .rep-presets button:hover { background: #e2e8f0; }
+
+.admin-dashboard-root .rep-export {
+  margin-left: auto; font-size: 0.8125rem; font-weight: 500; color: #fff;
+  background: #2a78d6; border: none; border-radius: 8px; padding: 0.45rem 0.9rem; cursor: pointer;
+}
+.admin-dashboard-root .rep-export:disabled { background: #cbd5e1; cursor: not-allowed; }
+
+/* --- summary tiles --- */
+.admin-dashboard-root .rep-tiles {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); gap: 0.75rem;
+}
+.admin-dashboard-root .rep-tile {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 0.75rem;
+  padding: 0.875rem 1rem; display: flex; flex-direction: column; gap: 0.2rem;
+}
+.admin-dashboard-root .rep-tile-label {
+  font-size: 0.6875rem; font-weight: 500; color: #64748b; text-transform: uppercase; letter-spacing: 0.03em;
+}
+.admin-dashboard-root .rep-tile-value {
+  font-size: 1.5rem; font-weight: 600; color: #0f172a; font-variant-numeric: tabular-nums;
+}
+.admin-dashboard-root .rep-tile-sub { font-size: 0.75rem; color: #94a3b8; }
+
+/* --- tables --- */
+.admin-dashboard-root .rep-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 0.75rem; overflow: hidden;
+}
+.admin-dashboard-root .rep-card-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.75rem;
+  padding: 0.75rem 1rem; font-size: 0.8125rem; font-weight: 600; color: #0f172a;
+  border-bottom: 1px solid #f1f5f9;
+}
+.admin-dashboard-root .rep-warn { font-size: 0.6875rem; font-weight: 400; color: #92400e; background: #fef3c7; border-radius: 999px; padding: 0.1rem 0.5rem; }
+
+.admin-dashboard-root .rep-scroll { max-height: 30rem; overflow-y: auto; }
+
+.admin-dashboard-root .rep-table { width: 100%; border-collapse: collapse; font-size: 0.8125rem; }
+.admin-dashboard-root .rep-table th {
+  position: sticky; top: 0; background: #f8fafc; z-index: 1;
+  text-align: left; font-size: 0.6875rem; font-weight: 600; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.03em;
+  padding: 0.5rem 0.75rem; border-bottom: 1px solid #e2e8f0; white-space: nowrap;
+}
+.admin-dashboard-root .rep-table td {
+  padding: 0.55rem 0.75rem; border-bottom: 1px solid #f1f5f9; color: #334155; vertical-align: top;
+}
+.admin-dashboard-root .rep-table tr:last-child td { border-bottom: none; }
+.admin-dashboard-root .rep-table tbody tr:hover { background: #f8fafc; }
+
+.admin-dashboard-root .rep-num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.admin-dashboard-root .rep-date { white-space: nowrap; color: #64748b; font-size: 0.75rem; }
+.admin-dashboard-root .rep-title { font-weight: 500; max-width: 20rem; }
+.admin-dashboard-root .rep-detail { color: #64748b; font-size: 0.75rem; max-width: 18rem; }
+.admin-dashboard-root .rep-sub { display: block; font-size: 0.6875rem; color: #94a3b8; }
+.admin-dashboard-root .rep-free { color: #94a3b8; font-size: 0.75rem; }
+.admin-dashboard-root .rep-empty { padding: 1.5rem 1rem; color: #94a3b8; font-size: 0.8125rem; }
+
+@media (max-width: 760px) {
+  .admin-dashboard-root .rep-export { margin-left: 0; }
+}
+
+/* ============================================================================
+   ACCOUNT DETAILS MODAL
+   ============================================================================ */
+
+.admin-dashboard-root .rep-person {
+  background: none; border: none; padding: 0; cursor: pointer;
+  font: inherit; color: #2a78d6; text-align: left;
+  border-bottom: 1px dotted #93c5fd;
+}
+.admin-dashboard-root .rep-person:hover { color: #1c5cab; border-bottom-style: solid; }
+
+.admin-dashboard-root .acct-modal { text-align: left; }
+.admin-dashboard-root .acct-loading { padding: 2rem 0; color: #94a3b8; font-size: 0.8125rem; }
+
+.admin-dashboard-root .acct-head {
+  display: flex; align-items: center; gap: 0.75rem;
+  padding-bottom: 0.875rem; border-bottom: 1px solid #f1f5f9; margin-bottom: 0.25rem;
+}
+.admin-dashboard-root .acct-avatar {
+  width: 2.5rem; height: 2.5rem; border-radius: 999px; flex-shrink: 0;
+  background: #2a78d6; color: #fff; font-weight: 600; font-size: 1rem;
+  display: flex; align-items: center; justify-content: center;
+}
+.admin-dashboard-root .acct-name { font-size: 0.9375rem; font-weight: 600; color: #0f172a; }
+.admin-dashboard-root .acct-username { font-size: 0.75rem; color: #94a3b8; }
+.admin-dashboard-root .acct-head-right {
+  margin-left: auto; display: flex; flex-direction: column; align-items: flex-end; gap: 0.3rem;
+}
+
+.admin-dashboard-root .acct-note {
+  font-size: 0.75rem; color: #92400e; background: #fffbeb;
+  border-left: 3px solid #fcd34d; border-radius: 4px; padding: 0.45rem 0.7rem; margin-top: 0.75rem;
+}
+
+.admin-dashboard-root .acct-section {
+  font-size: 0.6875rem; font-weight: 600; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.04em;
+  margin: 1.1rem 0 0.4rem;
+}
+
+.admin-dashboard-root .acct-grid {
+  display: grid; grid-template-columns: 9.5rem 1fr; gap: 0.4rem 0.75rem; margin: 0;
+  font-size: 0.8125rem;
+}
+.admin-dashboard-root .acct-grid dt { color: #64748b; }
+.admin-dashboard-root .acct-grid dd { margin: 0; color: #334155; overflow-wrap: anywhere; }
+.admin-dashboard-root .acct-grid dd a { color: #2a78d6; }
+.admin-dashboard-root .acct-muted { color: #94a3b8; font-style: italic; }
+
+/* ============================================================================
+   ROLES & WORKFLOW
+   ============================================================================ */
+
+.admin-dashboard-root .rw-list,
+.admin-dashboard-root .rw-steps {
+  padding: 0.5rem; display: flex; flex-direction: column; gap: 0.25rem;
+}
+
+.admin-dashboard-root .rw-row,
+.admin-dashboard-root .rw-step {
+  display: flex; align-items: flex-start; gap: 0.75rem;
+  padding: 0.7rem 0.75rem; border-radius: 8px;
+  transition: background-color 0.15s ease;
+}
+.admin-dashboard-root .rw-row:hover,
+.admin-dashboard-root .rw-step:hover { background: #f8fafc; }
+
+.admin-dashboard-root .rw-row-main { flex: 1 1 auto; min-width: 0; }
+.admin-dashboard-root .rw-row-label {
+  display: flex; align-items: center; gap: 0.4rem; flex-wrap: wrap;
+  font-size: 0.875rem; font-weight: 500; color: #334155;
+}
+.admin-dashboard-root .rw-row-sub { font-size: 0.75rem; color: #64748b; margin-top: 0.15rem; }
+.admin-dashboard-root .rw-row-sub strong { color: #334155; font-weight: 600; }
+.admin-dashboard-root .rw-row-blurb {
+  font-size: 0.75rem; color: #94a3b8; margin-top: 0.2rem; line-height: 1.4; max-width: 46rem;
+}
+.admin-dashboard-root .rw-unassigned { color: #b45309; }
+
+.admin-dashboard-root .rw-tag {
+  font-size: 0.625rem; font-weight: 500; text-transform: uppercase; letter-spacing: 0.03em;
+  border-radius: 999px; padding: 0.05rem 0.4rem;
+}
+.admin-dashboard-root .rw-tag--system { color: #475569; background: #e2e8f0; }
+
+.admin-dashboard-root .rw-step-num {
+  flex-shrink: 0; width: 1.5rem; height: 1.5rem; line-height: 1.5rem; text-align: center;
+  border-radius: 999px; background: #eff6ff; color: #2a78d6;
+  font-size: 0.75rem; font-weight: 600;
+}
+
+.admin-dashboard-root .rw-note {
+  font-size: 0.75rem; color: #64748b; line-height: 1.5;
+  padding: 0.75rem 1rem; border-top: 1px solid #f1f5f9; background: #fcfcfd;
+}
+.admin-dashboard-root .rw-note strong { color: #334155; }
+
+/* --- behaviour picker --- */
+.admin-dashboard-root .rw-behaviours { display: flex; flex-direction: column; gap: 0.4rem; }
+.admin-dashboard-root .rw-behaviour {
+  display: block; width: 100%; text-align: left; cursor: pointer;
+  border: 1.5px solid #e2e8f0; border-radius: 8px; background: #fff;
+  padding: 0.55rem 0.7rem;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.admin-dashboard-root .rw-behaviour:hover { border-color: #cbd5e1; }
+.admin-dashboard-root .rw-behaviour--on { border-color: #2a78d6; background: #eff6ff; }
+.admin-dashboard-root .rw-behaviour-label {
+  display: block; font-size: 0.8125rem; font-weight: 600; color: #0f172a;
+}
+.admin-dashboard-root .rw-behaviour-blurb {
+  display: block; font-size: 0.75rem; color: #64748b; line-height: 1.4; margin-top: 0.1rem;
+}
+
+.admin-dashboard-root .rw-modal-text {
+  font-size: 0.8125rem; color: #475569; line-height: 1.5; margin: 0 0 0.875rem;
+}
+
+/* ============================================================================
+   WHAT EACH ACTION HAS TO PASS THROUGH
+   A grid of actions against the chain's steps. Ticking is the whole
+   interaction, so the ticks are the only thing with weight.
+   ============================================================================ */
+
+.admin-dashboard-root .rw-matrix-note {
+  padding: 0.7rem 1rem 0; font-size: 0.75rem; line-height: 1.5; color: #64748b;
+}
+
+.admin-dashboard-root .rw-matrix { padding: 0.75rem 1rem 1rem; overflow-x: auto; }
+
+.admin-dashboard-root .rw-matrix-head,
+.admin-dashboard-root .rw-matrix-row {
+  display: grid;
+  grid-template-columns: minmax(12rem, 1.6fr) repeat(auto-fit, minmax(6rem, 1fr));
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 34rem;
+}
+
+.admin-dashboard-root .rw-matrix-head {
+  font-size: 0.6875rem; font-weight: 600; color: #64748b;
+  padding-bottom: 0.5rem; border-bottom: 1px solid #e2e8f0;
+  align-items: end;   /* step names sit on the line; the staff line hangs above */
+}
+
+/* A refusal shown inside the step dialog, where the person pressing Save can
+   actually see it. */
+.admin-dashboard-root .rw-save-error {
+  margin-bottom: 0.75rem;
+  padding: 0.55rem 0.7rem;
+  font-size: 0.75rem; line-height: 1.5; color: #b91c1c;
+  background: #fef2f2; border: 1px solid #fecaca; border-radius: 8px;
+}
+
+/* Who staffs each step, under its name. The column is a desk, not a job
+   title, and the header has to say so or the matrix reads as role-based. */
+.admin-dashboard-root .rw-matrix-head .rw-matrix-staff {
+  display: block; margin-top: 0.15rem;
+  font-size: 0.625rem; font-weight: 400; font-style: normal;
+  color: #94a3b8; line-height: 1.3;
+  overflow-wrap: anywhere;
+}
+
+.admin-dashboard-root .rw-matrix-row {
+  padding: 0.6rem 0; border-bottom: 1px solid #f1f5f9;
+}
+.admin-dashboard-root .rw-matrix-row:last-child { border-bottom: none; }
+
+.admin-dashboard-root .rw-matrix-col { text-align: center; }
+
+.admin-dashboard-root .rw-matrix-action { display: block; min-width: 0; }
+.admin-dashboard-root .rw-matrix-action strong {
+  display: block; font-size: 0.8125rem; font-weight: 600; color: #0f172a;
+}
+.admin-dashboard-root .rw-matrix-action em {
+  display: block; font-style: normal;
+  font-size: 0.6875rem; color: #94a3b8; margin-top: 0.1rem;
+}
+
+.admin-dashboard-root .rw-tick {
+  width: 1.5rem; height: 1.5rem; cursor: pointer;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-family: inherit; font-size: 0.8125rem; font-weight: 700;
+  color: #065f46; background: #fff;
+  border: 1.5px solid #e2e8f0; border-radius: 6px;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.admin-dashboard-root .rw-tick:hover { border-color: #cbd5e1; }
+.admin-dashboard-root .rw-tick--on { border-color: #6ee7b7; background: #d1fae5; }
+
+/* "no approval" is the one that deserves to be noticed, so it is the one
+   that is coloured. */
+.admin-dashboard-root .rw-matrix-result {
+  font-size: 0.75rem; color: #475569;
+}
+.admin-dashboard-root .rw-matrix-result em {
+  font-style: normal; font-weight: 600; color: #b45309;
+}
+
+/* Picking the specific people who staff a step. */
+.admin-dashboard-root .rw-staff {
+  display: flex; flex-wrap: wrap; gap: 0.35rem; margin-top: 0.15rem;
+}
+.admin-dashboard-root .rw-staff-pick {
+  display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer;
+  font-family: inherit; font-size: 0.75rem; color: #334155;
+  background: #fff; border: 1.5px solid #e2e8f0; border-radius: 999px;
+  padding: 0.25rem 0.65rem;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.admin-dashboard-root .rw-staff-pick:hover { border-color: #cbd5e1; }
+.admin-dashboard-root .rw-staff-pick--on { border-color: #2a78d6; background: #eff6ff; color: #1c5cab; }
+.admin-dashboard-root .rw-staff-tick {
+  width: 0.9rem; height: 0.9rem; flex-shrink: 0;
+  display: inline-flex; align-items: center; justify-content: center;
+  border: 1.5px solid #cbd5e1; border-radius: 3px; background: #fff;
+  font-size: 0.625rem; font-weight: 700; color: #2a78d6;
+}
+.admin-dashboard-root .rw-staff-pick--on .rw-staff-tick { border-color: #2a78d6; }

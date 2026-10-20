@@ -1,18 +1,22 @@
 // ----------------------------------------------------------------------------
-// File storage — Supabase Storage in production, local disk for local dev.
-//
-// WHY: Render's free tier wipes the filesystem on every restart and redeploy,
-// so anything written next to the app disappears. In production we therefore
-// push uploads into a Supabase Storage bucket and hand out short-lived signed
-// URLs instead of streaming bytes through Express.
+// File storage — disk, or Supabase Storage.
 //
 // The mode is chosen by whether SUPABASE_URL is set:
-//   - set   → remote mode (Supabase Storage). This is what Render runs.
-//   - unset → local mode (the uploades/ folder). This is what your PC runs,
-//             so `npm run dev` keeps working exactly as before.
+//   - unset → disk mode (the uploades/ folder). This is what Bluehost and your
+//             PC both run. Bluehost gives you a normal persistent filesystem,
+//             so files written here survive restarts and the app simply keeps
+//             its documents next to itself. No object store needed.
+//   - set   → remote mode (Supabase Storage). Needed only on hosts that wipe
+//             the filesystem on restart, which Render's free tier does.
 //
 // books.file_path stores the same thing in both modes (a filename / object
-// key), so no database migration is needed.
+// key), so switching between them needs no database migration.
+//
+// SEPARATE SWITCH — SERVE_UPLOADS_STATIC. Disk mode used to imply an open
+// /uploades static route, which made every stored PDF fetchable by anyone who
+// knew its filename. That was tolerable on a laptop and is not tolerable on a
+// public domain, so the two are now unlinked: disk mode is about where bytes
+// live, this is about whether they are served unguarded. It defaults to off.
 // ----------------------------------------------------------------------------
 const path = require('path');
 const fs = require('fs');
@@ -49,6 +53,12 @@ if (!remote && !fs.existsSync(uploadDir)) {
 
 function isRemote() {
   return remote;
+}
+
+// Whether server.js should mount /uploades as an open static directory.
+// Local development only — see the note at the top of this file.
+function allowStaticUploads() {
+  return !remote && process.env.SERVE_UPLOADS_STATIC === 'true';
 }
 
 // Same naming rule as the old multer diskStorage: timestamp prefix, spaces
@@ -108,6 +118,7 @@ function localPath(key) {
 
 module.exports = {
   isRemote,
+  allowStaticUploads,
   saveUpload,
   getSignedUrl,
   exists,

@@ -180,3 +180,31 @@
   .ow-side-nav { flex-direction: row; flex-wrap: wrap; }
   .ow-content { min-height: 0; }
 }
+
+/* --- Monthly download allowance, shown to the plain User role -------------- */
+.ow-allowance {
+  margin: auto 0.75rem 0.75rem;
+  padding: 0.75rem;
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+}
+.ow-allowance-label {
+  font-size: 0.625rem; font-weight: 600; letter-spacing: 0.05em;
+  text-transform: uppercase; color: rgba(255, 255, 255, 0.55);
+  margin-bottom: 0.2rem;
+}
+.ow-allowance-value {
+  font-size: 0.875rem; font-weight: 600; color: #fff; margin-bottom: 0.45rem;
+}
+.ow-allowance-bar {
+  height: 5px; border-radius: 3px; overflow: hidden;
+  background: rgba(255, 255, 255, 0.14); margin-bottom: 0.45rem;
+}
+.ow-allowance-fill {
+  height: 100%; border-radius: 3px; background: #eda100;
+  transition: width 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.ow-allowance-note {
+  font-size: 0.6875rem; line-height: 1.35; color: rgba(255, 255, 255, 0.55);
+}

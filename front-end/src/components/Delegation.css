@@ -1,0 +1,160 @@
+/* ============================================================================
+   DELEGATION — leave cover
+   Lives inside the office workspace, so it sets its own type and spacing
+   rather than inheriting whichever shell it is mounted in.
+   ============================================================================ */
+
+.dlg-root {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 1.5rem 1.25rem 3rem;
+  font-family: 'Inter', ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+  color: #334155;
+  box-sizing: border-box;
+}
+.dlg-root *, .dlg-root *::before, .dlg-root *::after { box-sizing: border-box; }
+
+.dlg-head { margin-bottom: 1.25rem; }
+.dlg-head h2 { font-size: 1.25rem; font-weight: 600; color: #0f172a; margin: 0 0 0.3rem; }
+.dlg-head p { font-size: 0.875rem; color: #64748b; margin: 0; line-height: 1.5; }
+
+.dlg-loading { color: #94a3b8; font-size: 0.875rem; padding: 2rem 0; }
+
+.dlg-error {
+  background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
+  border-radius: 8px; padding: 0.625rem 0.875rem; font-size: 0.8125rem; margin-bottom: 1rem;
+}
+
+.dlg-card {
+  background: #fff; border: 1px solid #e2e8f0; border-radius: 10px;
+  margin-bottom: 1rem; overflow: hidden;
+}
+.dlg-card--active { border-color: #fcd34d; background: #fffdf5; }
+
+.dlg-card-head {
+  padding: 0.75rem 1rem; font-size: 0.8125rem; font-weight: 600; color: #0f172a;
+  border-bottom: 1px solid #f1f5f9;
+}
+.dlg-card--active .dlg-card-head { border-bottom-color: #fef3c7; }
+
+/* --- rows --- */
+.dlg-row {
+  display: flex; align-items: center; justify-content: space-between; gap: 1rem;
+  padding: 0.75rem 1rem; border-bottom: 1px solid #f8fafc;
+}
+.dlg-row:last-of-type { border-bottom: none; }
+.dlg-row--past { opacity: 0.6; }
+
+.dlg-row-main {
+  display: flex; align-items: center; gap: 0.45rem; flex-wrap: wrap;
+  font-size: 0.875rem; font-weight: 500; color: #1e293b;
+}
+.dlg-row-sub { font-size: 0.75rem; color: #64748b; margin-top: 0.15rem; line-height: 1.4; }
+.dlg-row-sub strong { color: #334155; font-weight: 600; }
+
+.dlg-pill {
+  font-size: 0.625rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.03em;
+  color: #64748b; background: #f1f5f9; border-radius: 999px; padding: 0.1rem 0.45rem;
+}
+.dlg-pill--on { color: #065f46; background: #d1fae5; }
+
+.dlg-end {
+  flex-shrink: 0; font-size: 0.75rem; font-weight: 500; cursor: pointer;
+  color: #b91c1c; background: #fef2f2; border: 1px solid #fecaca;
+  border-radius: 6px; padding: 0.3rem 0.65rem;
+}
+.dlg-end:hover { background: #fee2e2; }
+
+.dlg-note {
+  font-size: 0.75rem; color: #92400e; line-height: 1.45;
+  padding: 0.7rem 1rem; border-top: 1px solid #fef3c7; background: #fffbeb;
+}
+
+.dlg-empty { padding: 1.25rem 1rem; font-size: 0.8125rem; color: #94a3b8; }
+
+/* --- the form --- */
+.dlg-form { padding: 1rem; }
+
+.dlg-duty {
+  font-size: 0.8125rem; color: #475569; line-height: 1.5;
+  background: #f8fafc; border-left: 3px solid #cbd5e1; border-radius: 6px;
+  padding: 0.55rem 0.75rem; margin-bottom: 1rem;
+}
+.dlg-duty strong { color: #0f172a; font-weight: 600; }
+
+.dlg-field { display: block; margin-bottom: 0.875rem; }
+.dlg-field > span {
+  display: block; font-size: 0.6875rem; font-weight: 600; color: #64748b;
+  text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 0.3rem;
+}
+.dlg-field em { font-weight: 400; text-transform: none; letter-spacing: 0; color: #94a3b8; }
+.dlg-field input, .dlg-field select {
+  width: 100%; border: 1px solid #e2e8f0; border-radius: 6px;
+  padding: 0.45rem 0.6rem; font-size: 0.8125rem; color: #334155;
+  font-family: inherit; background: #fff;
+}
+
+.dlg-dates { display: flex; gap: 0.75rem; }
+.dlg-dates .dlg-field { flex: 1 1 0; }
+
+.dlg-submit {
+  font-size: 0.8125rem; font-weight: 500; color: #fff; cursor: pointer;
+  background: #2a78d6; border: none; border-radius: 8px; padding: 0.5rem 1.1rem;
+}
+.dlg-submit:hover { background: #1c5cab; }
+.dlg-submit:disabled { background: #cbd5e1; cursor: not-allowed; }
+
+@media (max-width: 560px) {
+  .dlg-dates { flex-direction: column; gap: 0; }
+}
+
+/* --- what to hand over --------------------------------------------------- */
+.dlg-scope-head { display: flex; justify-content: flex-end; margin-bottom: 0.35rem; }
+.dlg-scope-all {
+  font-size: 0.6875rem; font-weight: 500; cursor: pointer;
+  color: #2a78d6; background: #eff6ff; border: 1px solid #dbeafe;
+  border-radius: 999px; padding: 0.15rem 0.6rem;
+}
+.dlg-scope-all--on { color: #065f46; background: #d1fae5; border-color: #a7f3d0; }
+
+.dlg-scopes { display: flex; flex-direction: column; gap: 0.3rem; }
+
+.dlg-scope {
+  display: flex; align-items: flex-start; gap: 0.55rem; width: 100%;
+  text-align: left; cursor: pointer; font-family: inherit;
+  border: 1.5px solid #e2e8f0; border-radius: 8px; background: #fff;
+  padding: 0.5rem 0.65rem;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
+}
+.dlg-scope:hover { border-color: #cbd5e1; }
+.dlg-scope--on { border-color: #2a78d6; background: #eff6ff; }
+
+.dlg-scope-check {
+  flex-shrink: 0; width: 1.1rem; height: 1.1rem; margin-top: 0.05rem;
+  border: 1.5px solid #cbd5e1; border-radius: 4px; background: #fff;
+  font-size: 0.75rem; line-height: 1rem; text-align: center; color: #2a78d6;
+}
+.dlg-scope--on .dlg-scope-check { border-color: #2a78d6; background: #fff; }
+
+.dlg-scope-label { display: block; font-size: 0.8125rem; font-weight: 500; color: #1e293b; }
+.dlg-scope-hint  { display: block; font-size: 0.6875rem; color: #64748b; margin-top: 0.05rem; }
+
+.dlg-scope-note {
+  font-size: 0.6875rem; color: #64748b; line-height: 1.4; margin-top: 0.45rem;
+}
+
+/* A responsibility the giver has since lost. The row still lists what was
+   signed over, but this part is no longer doing anything — saying so beats
+   letting someone rely on cover that is not there. */
+.dlg-lapsed {
+  font-size: 0.6875rem; color: #9a3412; line-height: 1.4; margin-top: 0.3rem;
+  background: #fff7ed; border-left: 2px solid #fdba74; border-radius: 4px;
+  padding: 0.25rem 0.45rem; max-width: 34rem;
+}
+
+.dlg-expiry {
+  font-size: 0.75rem; color: #065f46; line-height: 1.45;
+  background: #ecfdf5; border-left: 3px solid #6ee7b7; border-radius: 6px;
+  padding: 0.5rem 0.7rem; margin-bottom: 0.875rem;
+}
+.dlg-expiry strong { font-weight: 600; }
